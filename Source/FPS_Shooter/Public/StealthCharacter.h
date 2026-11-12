@@ -7,12 +7,14 @@
 #include "StealthCharacter.generated.h"
 
 class AFallingSoundSphere;
+class AStealthSupplyPickup;
 class UAnimSequence;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
 class UParticleSystem;
 class USkeletalMeshComponent;
+class UStaticMeshComponent;
 class USoundBase;
 class USoundRayEmitterComponent;
 
@@ -24,7 +26,8 @@ enum class EStealthArmsState : uint8
 	Crouch,
 	Fire,
 	Reload,
-	Aim
+	Aim,
+	Heal
 };
 
 UCLASS()
@@ -53,9 +56,11 @@ public:
 	float GetHealth() const { return CurrentHealth; }
 	float GetHealthFraction() const { return FMath::Clamp(CurrentHealth / FMath::Max(MaxHealth, 1.0f), 0.0f, 1.0f); }
 	float GetHitFeedback() const { return HitFeedback; }
+	float GetHitConfirmAlpha() const { return HitConfirmSeconds / HitConfirmDuration; }
 	static constexpr float DeathPresentationDuration = 0.45f;
 	FText GetInteractionPrompt() const;
 	void StopMissionActions();
+	void ReleaseHeldActions();
 	bool CanPerformMissionAction() const;
 
 	UFUNCTION(BlueprintPure, Category="Combat")
@@ -63,6 +68,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Combat")
 	int32 GetReserveAmmo() const { return ReserveAmmo; }
+	int32 GetReserveAmmoCapacity() const { return FMath::Max(0, ReserveAmmoCapacity); }
+	bool TryResupplyAmmo(int32 Amount);
+	int32 GetLastAmmoPickup() const { return LastAmmoPickup; }
+	float GetAmmoPickupFeedback() const { return AmmoPickupFeedback; }
+	bool TryStartHealing(AStealthSupplyPickup& Supply);
+	bool IsHealing() const { return HealingSupply.IsValid(); }
+	float GetHealingProgress() const;
 
 	UFUNCTION(BlueprintPure, Category="First Person")
 	EStealthArmsState GetArmsState() const { return ArmsState; }
@@ -82,7 +94,7 @@ public:
 	UAnimSequence* GetArmsRunAnimation() const { return ArmsRunAnimation; }
 	UAnimSequence* GetArmsFireAnimation() const { return ArmsFireAnimation; }
 	FTransform GetWeaponToHandTransform() const { return WeaponToHandTransform; }
-	FVector GetMagazineGripLocation() const { return MagazineGripLocation; }
+	FVector GetMagazineGripLocation() const;
 	FVector GetForegripLocation() const { return ForegripLocation; }
 	FVector GetIronSightLocation() const { return IronSightLocation; }
 
@@ -98,6 +110,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USkeletalMeshComponent> WeaponMesh;
+
+	UPROPERTY(VisibleAnywhere, Category="Components")
+	TObjectPtr<UStaticMeshComponent> TreatmentPouch;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USoundRayEmitterComponent> SoundEmitter;
@@ -153,6 +168,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon", meta=(ClampMin="0"))
 	int32 ReserveAmmo = 90;
 
+	UPROPERTY(EditAnywhere, Category="Weapon", meta=(ClampMin="0"))
+	int32 ReserveAmmoCapacity = 150;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon", meta=(ClampMin="0.01"))
 	float FireInterval = 0.12f;
 
@@ -199,6 +217,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon")
 	FTransform WeaponGripTransform;
 
+	// Model-space fallback for weapons without an animated Clip_Bone.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon")
 	FVector MagazineGripLocation = FVector(0.0f, 12.0f, -7.0f);
 
@@ -274,6 +293,7 @@ private:
 
 	bool bWantsToSprint = false;
 	bool bWantsToFire = false;
+	bool bFireBuffered = false;
 	bool bWantsToAim = false;
 	bool bIsAiming = false;
 	bool bIsReloading = false;
@@ -282,6 +302,12 @@ private:
 	float AimAlpha = 0.0f;
 	float CrouchAlpha = 0.0f;
 	float ReloadPoseTilt = 0.0f;
+	static constexpr float HealingDuration = 1.65f;
+	TWeakObjectPtr<AStealthSupplyPickup> HealingSupply;
+	float HealingElapsed = 0.0f;
+	float HealingPoseWeight = 0.0f;
+	float AmmoPickupFeedback = 0.0f;
+	int32 LastAmmoPickup = 0;
 	float PeakFallSpeed = 0.0f;
 	float LastLandingStrength = 0.0f;
 	FTransform AimArmsTransform;
@@ -291,6 +317,8 @@ private:
 	int32 AmmoInMagazine = 0;
 	float CurrentHealth = 100.0f;
 	float HitFeedback = 0.0f;
+	static constexpr float HitConfirmDuration = 0.16f;
+	float HitConfirmSeconds = 0.0f;
 	float DeathElapsed = 0.0f;
 	FRotator DeathCameraStart;
 	FVector DeathArmsStart;
@@ -313,6 +341,8 @@ private:
 	void StopAim();
 	void CancelReload();
 	void UpdateReload(float DeltaSeconds);
+	void UpdateHealing(float DeltaSeconds);
+	void CancelHealing();
 	void CalibrateWeapon();
 	void UpdateFirstPersonPose(float DeltaSeconds);
 	void UpdateMovementState();

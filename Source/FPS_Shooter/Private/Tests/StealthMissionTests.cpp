@@ -315,7 +315,11 @@ public:
 				for (const AActor* Destination : { static_cast<AActor*>(Objective), static_cast<AActor*>(Exit) })
 				{
 					FNavLocation Projected;
-					const bool bProjected = Navigation->ProjectPointToNavigation(Destination->GetActorLocation(), Projected, FVector(200, 200, 300));
+					// Players approach the terminal from the front; the terminal itself sits on a table.
+					const FVector Approach = Destination == Objective
+						? Objective->GetActorLocation() - Objective->GetActorForwardVector() * 125.0
+						: Destination->GetActorLocation();
+					const bool bProjected = Navigation->ProjectPointToNavigation(Approach, Projected, FVector(90, 90, 300));
 					Test->TestTrue(TEXT("Mission destination projects onto NavMesh"), bProjected);
 					UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(World,
 						Player->GetActorLocation(), Projected.Location) : nullptr;

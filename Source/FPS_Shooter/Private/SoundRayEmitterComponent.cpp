@@ -4,7 +4,9 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
+#include "Kismet/GameplayStatics.h"
 #include "NPCHearingComponent.h"
+#include "Sound/SoundAttenuation.h"
 
 USoundRayEmitterComponent::USoundRayEmitterComponent()
 {
@@ -54,7 +56,24 @@ bool USoundRayEmitterComponent::ShouldAutoEmitFootstep() const
 
 void USoundRayEmitterComponent::EmitFootstepSound()
 {
-	EmitSoundEvent(ESoundEventType::Footstep);
+	if (bFootstepsEmitSoundRays)
+	{
+		EmitSoundEvent(ESoundEventType::Footstep);
+	}
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+	if (!Pawn || !FootstepSound || FootstepPlaybackVolume <= 0.0f) { return; }
+
+	const float Pitch = FMath::FRandRange(0.92f, 1.08f);
+	if (FootstepAttenuation)
+	{
+		const FVector Feet = Pawn->GetActorLocation() - FVector(0, 0, Pawn->GetSimpleCollisionHalfHeight() - 12.0f);
+		UGameplayStatics::PlaySoundAtLocation(this, FootstepSound, Feet, FRotator::ZeroRotator,
+			FootstepPlaybackVolume, Pitch, 0, FootstepAttenuation, nullptr, Pawn);
+	}
+	else if (Pawn->IsLocallyControlled())
+	{
+		UGameplayStatics::PlaySound2D(this, FootstepSound, FootstepPlaybackVolume, Pitch);
+	}
 }
 
 void USoundRayEmitterComponent::EmitSoundEvent(ESoundEventType Type, float VolumeOverride, float DistanceOverride, AActor* SourceOwner)

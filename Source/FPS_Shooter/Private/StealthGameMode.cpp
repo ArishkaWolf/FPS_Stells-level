@@ -113,13 +113,13 @@ FString AStealthGameMode::GetObjectiveText() const
 	switch (GetMissionStage())
 	{
 	case EStealthMissionStage::SafeZone:
-		return TEXT("Leave the safe area");
+		return TEXT("Покиньте безопасную зону");
 	case EStealthMissionStage::Evade:
-		return TEXT("Break line of sight and hide");
+		return TEXT("Скройтесь из виду и переждите поиск");
 	case EStealthMissionStage::Extraction:
-		return TEXT("Reach the extraction zone");
+		return TEXT("Доберитесь до точки эвакуации");
 	default:
-		return TEXT("Infiltrate and collect the intel");
+		return TEXT("Проникните внутрь и заберите данные");
 	}
 }
 
@@ -135,15 +135,15 @@ FString AStealthGameMode::GetThreatText() const
 		}
 		if (It->GetAIState() == EStealthAIState::Chase)
 		{
-			return TEXT("DETECTED - Guard opening fire. Break line of sight!");
+			return TEXT("Вас заметили. Скройтесь из виду!");
 		}
 		bInvestigating |= It->GetAIState() != EStealthAIState::Patrol;
 		bSuspicious |= It->GetAIState() == EStealthAIState::Suspicious;
 	}
-	return IsPlayerPursued() ? TEXT("SEARCHING - Stay hidden until the search ends.")
-		: bSuspicious ? TEXT("GUARD SUSPICIOUS - Keep quiet and stay out of sight.")
-		: bInvestigating ? TEXT("GUARD INVESTIGATING - Stay hidden and quiet.")
-		: TEXT("HIDDEN - Crouch for quiet footsteps. [Q] throws a distraction.");
+	return IsPlayerPursued() ? TEXT("Охрана ведёт поиск. Оставайтесь в укрытии.")
+		: bSuspicious ? TEXT("Охранник насторожился. Двигайтесь тихо.")
+		: bInvestigating ? TEXT("Охрана проверяет шум. Оставайтесь в укрытии.")
+		: TEXT("Вы скрыты. Присед приглушает шаги. [Q] бросает приманку.");
 }
 
 bool AStealthGameMode::CollectObjective(AActor* Collector)

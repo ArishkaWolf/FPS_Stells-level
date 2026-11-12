@@ -3,6 +3,9 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "HAL/IConsoleManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInterface.h"
+#include "Sound/SoundBase.h"
 #include "SoundRayEmitterComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -16,21 +19,28 @@ AFallingSoundSphere::AFallingSoundSphere()
 	PrimaryActorTick.bCanEverTick = false;
 
 	CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComponent"));
-	CollisionComponent->InitSphereRadius(50.0f);
+	CollisionComponent->InitSphereRadius(9.0f);
 	CollisionComponent->SetCollisionProfileName(TEXT("PhysicsActor"));
 	CollisionComponent->SetSimulatePhysics(true);
+	CollisionComponent->BodyInstance.bUseCCD = true;
 	CollisionComponent->SetNotifyRigidBodyCollision(true);
 	SetRootComponent(CollisionComponent);
 
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	MeshComponent->SetupAttachment(CollisionComponent);
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MeshComponent->SetRelativeScale3D(FVector(0.18f));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	if (SphereMesh.Succeeded())
 	{
 		MeshComponent->SetStaticMesh(SphereMesh.Object);
 	}
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Steel(TEXT("/Game/Industrial/Materials/M_MatteSteel.M_MatteSteel"));
+	if (Steel.Succeeded()) { MeshComponent->SetMaterial(0, Steel.Object); }
+	static ConstructorHelpers::FObjectFinder<USoundBase> Clink(
+		TEXT("/Game/MilitaryWeapSilver/Sound/GrenadeLauncher/Cues/GrenadeLauncher_Bounce_Cue.GrenadeLauncher_Bounce_Cue"));
+	ImpactSound = Clink.Object;
 
 	SoundEmitter = CreateDefaultSubobject<USoundRayEmitterComponent>(TEXT("SoundEmitter"));
 	SoundEmitter->bAutoEmitFootsteps = false;
@@ -50,6 +60,7 @@ AFallingSoundSphere::AFallingSoundSphere()
 void AFallingSoundSphere::BeginPlay()
 {
 	Super::BeginPlay();
+	CollisionComponent->SetMassOverrideInKg(NAME_None, 0.8f);
 	CollisionComponent->OnComponentHit.AddDynamic(this, &AFallingSoundSphere::OnSphereHit);
 }
 
@@ -63,4 +74,8 @@ void AFallingSoundSphere::OnSphereHit(UPrimitiveComponent* HitComponent, AActor*
 	bEmittedSound = true;
 	SoundEmitter->RayCount = FMath::Max(1, CVarFallingSphereRayCount.GetValueOnGameThread());
 	SoundEmitter->EmitSoundEvent(ESoundEventType::ThrownObject);
+	if (ImpactSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, ImpactSound, Hit.ImpactPoint, 0.85f);
+	}
 }

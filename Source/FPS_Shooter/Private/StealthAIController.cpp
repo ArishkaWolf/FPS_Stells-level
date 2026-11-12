@@ -59,11 +59,11 @@ FText AStealthAIController::GetStateDisplayName() const
 {
 	switch (AIState)
 	{
-	case EStealthAIState::Suspicious: return NSLOCTEXT("StealthAI", "Suspicious", "SUSPICIOUS");
-	case EStealthAIState::Investigate: return NSLOCTEXT("StealthAI", "Investigate", "INVESTIGATE");
-	case EStealthAIState::Search: return NSLOCTEXT("StealthAI", "Search", "SEARCH");
-	case EStealthAIState::Chase: return NSLOCTEXT("StealthAI", "Chase", "CHASE");
-	default: return NSLOCTEXT("StealthAI", "Patrol", "PATROL");
+	case EStealthAIState::Suspicious: return NSLOCTEXT("StealthAI", "Suspicious", "НАСТОРОЖИЛСЯ");
+	case EStealthAIState::Investigate: return NSLOCTEXT("StealthAI", "Investigate", "ПРОВЕРЯЕТ ШУМ");
+	case EStealthAIState::Search: return NSLOCTEXT("StealthAI", "Search", "ИЩЕТ");
+	case EStealthAIState::Chase: return NSLOCTEXT("StealthAI", "Chase", "ПРЕСЛЕДУЕТ");
+	default: return NSLOCTEXT("StealthAI", "Patrol", "ПАТРУЛИРУЕТ");
 	}
 }
 

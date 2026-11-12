@@ -90,7 +90,7 @@ public:
 		}
 		if (Stage == 1)
 		{
-			Test.TestEqual(TEXT("Only the focused pickup supplies the prompt"), Player->GetInteractionPrompt().ToString(), FString(TEXT("Take noise makers (+1)")));
+			Test.TestEqual(TEXT("Only the focused pickup supplies the prompt"), Player->GetInteractionPrompt().ToString(), FString(TEXT("Взять приманки (+1)")));
 			Capture(TEXT("Playing"), Size);
 			if (++ResolutionIndex == UE_ARRAY_COUNT(Resolutions))
 			{
