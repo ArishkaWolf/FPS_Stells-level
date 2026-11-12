@@ -23,6 +23,12 @@ AStealthDoor::AStealthDoor()
 	SoundEmitter->SoundOffset = FVector(0, 50, 100);
 }
 
+void AStealthDoor::BeginPlay()
+{
+	Super::BeginPlay();
+	ClosedLeaf = DoorMesh->GetRelativeTransform();
+}
+
 void AStealthDoor::Interact_Implementation(AStealthCharacter* InteractingCharacter)
 {
 	if (IsValid(InteractingCharacter) && InteractingCharacter->CanPerformMissionAction())
@@ -33,8 +39,8 @@ void AStealthDoor::Interact_Implementation(AStealthCharacter* InteractingCharact
 
 FText AStealthDoor::GetInteractionPrompt_Implementation() const
 {
-	return bIsOpen ? NSLOCTEXT("StealthUI", "CloseDoor", "Close door")
-		: NSLOCTEXT("StealthUI", "OpenDoor", "Open door");
+	return bIsOpen ? NSLOCTEXT("StealthUI", "CloseDoor", "Закрыть дверь")
+		: NSLOCTEXT("StealthUI", "OpenDoor", "Открыть дверь");
 }
 
 bool AStealthDoor::SetOpen(bool bOpen, AActor* Initiator)
@@ -55,8 +61,7 @@ void AStealthDoor::Tick(float DeltaSeconds)
 	if (!FMath::IsNearlyEqual(Previous, OpenAlpha))
 	{
 		// Rotate the leaf around the hinge, not around its mesh center.
-		const FRotator Rotation(0, OpenAngle * FMath::SmoothStep(0.0f, 1.0f, OpenAlpha), 0);
-		DoorMesh->SetRelativeLocation(Rotation.RotateVector(FVector(0, 50, 100)));
-		DoorMesh->SetRelativeRotation(Rotation);
+		const FQuat Swing(FRotator(0, OpenAngle * FMath::SmoothStep(0.0f, 1.0f, OpenAlpha), 0));
+		DoorMesh->SetRelativeLocationAndRotation(Swing.RotateVector(ClosedLeaf.GetLocation()), Swing * ClosedLeaf.GetRotation());
 	}
 }

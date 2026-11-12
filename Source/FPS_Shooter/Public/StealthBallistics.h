@@ -34,7 +34,7 @@ namespace StealthBallistics
 {
 	void ConfigureMannequinHitMesh(USkeletalMeshComponent& Mesh);
 	float GetDamageMultiplier(FName Bone);
-	void Fire(ACharacter& Shooter, const FVector& ClearanceStart, const FVector& Muzzle,
+	bool Fire(ACharacter& Shooter, const FVector& ClearanceStart, const FVector& Muzzle,
 		const FVector& AimOrigin, const FVector& Direction, float Range, float BaseDamage,
 		const FStealthImpactEffects& Effects);
 }

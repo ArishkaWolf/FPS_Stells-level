@@ -5,6 +5,7 @@
 #include "StealthHUD.generated.h"
 
 class AStealthGameMode;
+class AStealthCharacter;
 
 UCLASS()
 class FPS_SHOOTER_API AStealthHUD : public AHUD
@@ -18,4 +19,8 @@ public:
 private:
 	void DrawGuardIndicators();
 	void DrawMissionResult(const AStealthGameMode& Mission);
+	void DrawTacticalMap(const AStealthGameMode& Mission, const AStealthCharacter& Character);
+
+	TArray<FBox2D> MapObstacles;
+	FBox2D MapBounds{ForceInit};
 };

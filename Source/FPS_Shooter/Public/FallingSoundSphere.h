@@ -5,6 +5,7 @@
 #include "FallingSoundSphere.generated.h"
 
 class USoundRayEmitterComponent;
+class USoundBase;
 class USphereComponent;
 class UStaticMeshComponent;
 
@@ -32,5 +33,8 @@ protected:
 	void OnSphereHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
 
 private:
+	UPROPERTY(EditDefaultsOnly, Category="Audio")
+	TObjectPtr<USoundBase> ImpactSound;
+
 	bool bEmittedSound = false;
 };

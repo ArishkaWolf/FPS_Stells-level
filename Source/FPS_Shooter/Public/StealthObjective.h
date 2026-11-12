@@ -8,7 +8,6 @@
 class UPointLightComponent;
 class USphereComponent;
 class UStaticMeshComponent;
-class UTextRenderComponent;
 class USoundRayInteractionComponent;
 
 UCLASS()
@@ -29,9 +28,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category="Components")
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
-
-	UPROPERTY(VisibleAnywhere, Category="Components")
-	TObjectPtr<UTextRenderComponent> LabelComponent;
 
 	UPROPERTY(VisibleAnywhere, Category="Components")
 	TObjectPtr<UPointLightComponent> LightComponent;

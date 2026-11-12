@@ -2,6 +2,7 @@
 
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInterface.h"
 #include "StealthCharacter.h"
 #include "SoundRayInteractionComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -14,18 +15,22 @@ ANoiseMakerPickup::ANoiseMakerPickup()
 	CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComponent"));
 	CollisionComponent->InitSphereRadius(35.0f);
 	CollisionComponent->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+	CollisionComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	CollisionComponent->SetCanEverAffectNavigation(false);
 	SetRootComponent(CollisionComponent);
 
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	MeshComponent->SetupAttachment(CollisionComponent);
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	MeshComponent->SetRelativeScale3D(FVector(0.45f));
+	MeshComponent->SetRelativeScale3D(FVector(0.24f));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	if (SphereMesh.Succeeded())
 	{
 		MeshComponent->SetStaticMesh(SphereMesh.Object);
 	}
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Steel(TEXT("/Game/Industrial/Materials/M_MatteSteel.M_MatteSteel"));
+	if (Steel.Succeeded()) { MeshComponent->SetMaterial(0, Steel.Object); }
 }
 
 void ANoiseMakerPickup::Interact_Implementation(AStealthCharacter* InteractingCharacter)
@@ -42,5 +47,5 @@ void ANoiseMakerPickup::Interact_Implementation(AStealthCharacter* InteractingCh
 
 FText ANoiseMakerPickup::GetInteractionPrompt_Implementation() const
 {
-	return FText::Format(NSLOCTEXT("StealthUI", "TakeNoiseMakers", "Take noise makers (+{0})"), FText::AsNumber(Amount));
+	return FText::Format(NSLOCTEXT("StealthUI", "TakeNoiseMakers", "Взять приманки (+{0})"), FText::AsNumber(Amount));
 }

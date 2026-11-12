@@ -6,12 +6,14 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "Engine/Font.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "NPCHearingComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Particles/ParticleSystem.h"
+#include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 #include "StealthAIController.h"
 #include "StealthGameMode.h"
@@ -74,7 +76,18 @@ ASoundHearingNPC::ASoundHearingNPC()
 	HearingComponent->ForgetDurationSeconds = 12.0f;
 	HearingComponent->bDrawDebug = false;
 	SoundEmitter = CreateDefaultSubobject<USoundRayEmitterComponent>(TEXT("SoundEmitter"));
-	SoundEmitter->bAutoEmitFootsteps = false;
+	SoundEmitter->bFootstepsEmitSoundRays = false;
+	SoundEmitter->MinSpeedForFootsteps = 35.0f;
+	SoundEmitter->FootstepPlaybackVolume = 0.75f;
+	static ConstructorHelpers::FObjectFinder<USoundBase> ConcreteStep(TEXT("/Game/Audio/Stealth/ConcreteStep.ConcreteStep"));
+	SoundEmitter->FootstepSound = ConcreteStep.Object;
+	auto* StepAttenuation = CreateDefaultSubobject<USoundAttenuation>(TEXT("FootstepAttenuation"));
+	StepAttenuation->Attenuation.AttenuationShapeExtents = FVector(175, 0, 0);
+	StepAttenuation->Attenuation.FalloffDistance = 1350.0f;
+	StepAttenuation->Attenuation.bEnableOcclusion = true;
+	StepAttenuation->Attenuation.OcclusionVolumeAttenuation = 0.50f;
+	StepAttenuation->Attenuation.OcclusionLowPassFilterFrequency = 1400.0f;
+	SoundEmitter->FootstepAttenuation = StepAttenuation;
 	SoundEmitter->RayCount = 16;
 	SoundEmitter->RayPitchDegrees = 0.0f;
 	SoundEmitter->Volume = 1.6f;
@@ -88,7 +101,9 @@ ASoundHearingNPC::ASoundHearingNPC()
 	SoundLabel->SetVerticalAlignment(EVRTA_TextCenter);
 	SoundLabel->SetTextRenderColor(FColor::Cyan);
 	SoundLabel->SetWorldSize(28.0f);
-	SoundLabel->SetText(FText::FromString(TEXT("Sound: 0%")));
+	static ConstructorHelpers::FObjectFinder<UFont> RussianSigns(TEXT("/Game/Interface/RussianSigns.RussianSigns"));
+	if (RussianSigns.Succeeded()) { SoundLabel->SetFont(RussianSigns.Object); }
+	SoundLabel->SetText(FText::FromString(TEXT("Шум 0%")));
 	SoundLabel->SetVisibility(false);
 	CurrentHealth = MaxHealth;
 }
@@ -182,7 +197,8 @@ void ASoundHearingNPC::Die()
 	HearingComponent->ClearSoundMemory();
 	HearingComponent->Deactivate();
 	HearingComponent->SetComponentTickEnabled(false);
-	SoundLabel->SetText(NSLOCTEXT("StealthAI", "Dead", "DOWN"));
+	SoundEmitter->SetComponentTickEnabled(false);
+	SoundLabel->SetText(NSLOCTEXT("StealthAI", "Dead", "НЕЙТРАЛИЗОВАН"));
 	SoundLabel->SetTextRenderColor(FColor::Silver);
 	if (AStealthAIController* AI = Cast<AStealthAIController>(GetController()))
 	{
@@ -206,6 +222,8 @@ void ASoundHearingNPC::Tick(float DeltaSeconds)
 		DeathAnimationAge += DeltaSeconds;
 		return;
 	}
+	SoundEmitter->FootstepInterval = FMath::GetMappedRangeValueClamped(
+		FVector2D(180, 430), FVector2D(0.51, 0.33), GetVelocity().Size2D());
 
 	if (!HearingComponent || !SoundLabel)
 	{
@@ -219,9 +237,9 @@ void ASoundHearingNPC::Tick(float DeltaSeconds)
 		: 0;
 	const FText StateName = StealthController
 		? StealthController->GetStateDisplayName()
-		: NSLOCTEXT("StealthAI", "NoController", "NO AI");
+		: NSLOCTEXT("StealthAI", "NoController", "БЕЗ УПРАВЛЕНИЯ");
 	SoundLabel->SetText(FText::Format(
-		NSLOCTEXT("SoundNPC", "NPCStatus", "{0}\n{1}  Sight: {2}%\nSound: {3}%"),
+		NSLOCTEXT("SoundNPC", "NPCStatus", "{0}\n{1}  Зрение {2}%\nШум {3}%"),
 		NPCLabel,
 		StateName,
 		FText::AsNumber(DetectionPercent),

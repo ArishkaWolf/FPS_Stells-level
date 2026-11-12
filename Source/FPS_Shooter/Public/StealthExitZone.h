@@ -7,7 +7,6 @@
 class UBoxComponent;
 class UPointLightComponent;
 class UPrimitiveComponent;
-class UTextRenderComponent;
 
 UCLASS()
 class FPS_SHOOTER_API AStealthExitZone : public AActor
@@ -24,9 +23,6 @@ protected:
 private:
 	UPROPERTY(VisibleAnywhere, Category="Components")
 	TObjectPtr<UBoxComponent> TriggerComponent;
-
-	UPROPERTY(VisibleAnywhere, Category="Components")
-	TObjectPtr<UTextRenderComponent> LabelComponent;
 
 	UPROPERTY(VisibleAnywhere, Category="Components")
 	TObjectPtr<UPointLightComponent> LightComponent;

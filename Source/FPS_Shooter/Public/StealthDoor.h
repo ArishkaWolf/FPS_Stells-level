@@ -30,6 +30,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Door", meta=(ClampMin="0.1"))
 	float OpenDuration = 0.65f;
 private:
+	virtual void BeginPlay() override;
+	FTransform ClosedLeaf;
 	bool bIsOpen = false;
 	float OpenAlpha = 0.0f;
 };

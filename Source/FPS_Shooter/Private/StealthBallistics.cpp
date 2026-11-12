@@ -75,7 +75,7 @@ void FStealthImpactEffects::Play(const AActor& Shooter, const FHitResult& Hit) c
 	}
 	if (!bHitCharacter && BulletMark && Hit.GetComponent())
 	{
-		if (UDecalComponent* Decal = UGameplayStatics::SpawnDecalAttached(BulletMark, FVector(3.0f, 4.5f, 4.5f),
+		if (UDecalComponent* Decal = UGameplayStatics::SpawnDecalAttached(BulletMark, FVector(2.0f, 1.7f, 1.7f),
 			Hit.GetComponent(), NAME_None, Hit.ImpactPoint, SurfaceRotation, EAttachLocation::KeepWorldPosition, 10.0f))
 		{
 			Decal->SetWorldScale3D(FVector::OneVector);
@@ -83,7 +83,7 @@ void FStealthImpactEffects::Play(const AActor& Shooter, const FHitResult& Hit) c
 	}
 }
 
-void StealthBallistics::Fire(ACharacter& Shooter, const FVector& ClearanceStart, const FVector& Muzzle,
+bool StealthBallistics::Fire(ACharacter& Shooter, const FVector& ClearanceStart, const FVector& Muzzle,
 	const FVector& AimOrigin, const FVector& Direction, float Range, float BaseDamage,
 	const FStealthImpactEffects& Effects)
 {
@@ -114,8 +114,10 @@ void StealthBallistics::Fire(ACharacter& Shooter, const FVector& ClearanceStart,
 		Effects.Play(Shooter, Hit);
 		if (AActor* Target = Hit.GetActor())
 		{
-			UGameplayStatics::ApplyPointDamage(Target, BaseDamage * GetDamageMultiplier(Hit.BoneName),
+			const float Damage = UGameplayStatics::ApplyPointDamage(Target, BaseDamage * GetDamageMultiplier(Hit.BoneName),
 				Direction, Hit, Shooter.GetController(), &Shooter, UDamageType::StaticClass());
+			return Damage > 0.0f && Target->IsA<ACharacter>();
 		}
 	}
+	return false;
 }

@@ -125,6 +125,7 @@ public:
 			Fire(*PC);
 			Test.TestEqual(TEXT("Player rifle spends a round on cover"), Player->GetAmmoInMagazine(), 29);
 			Test.TestEqual(TEXT("Wall blocks player damage"), Guard->GetHealth(), 100.0f);
+			Test.TestEqual(TEXT("Wall hits do not show a hit marker"), Player->GetHitConfirmAlpha(), 0.0f);
 			Test.TestTrue(TEXT("Guard fires toward the wall"), Guard->FireWeaponAt(Player));
 			Test.TestEqual(TEXT("Wall blocks guard damage"), Player->GetHealth(), 100.0f);
 			bool bBulletMark = false;
@@ -143,6 +144,7 @@ public:
 			Wall->Destroy();
 			Fire(*PC);
 			Test.TestEqual(TEXT("ADS rifle head hit uses 2.5x damage"), Guard->GetHealth(), 15.0f);
+			Test.TestTrue(TEXT("Damage confirms the hit at the reticle"), Player->GetHitConfirmAlpha() > 0.0f);
 			Test.TestTrue(TEXT("Surviving guard starts hit reaction"), Guard->GetHitAnimationAge() < 0.05f);
 			AimAt(*PC, *Camera, Guard->GetMesh()->GetSocketLocation(TEXT("spine_04")));
 			break;

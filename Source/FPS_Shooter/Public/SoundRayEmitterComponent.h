@@ -5,6 +5,9 @@
 #include "SoundRayEvent.h"
 #include "SoundRayEmitterComponent.generated.h"
 
+class USoundAttenuation;
+class USoundBase;
+
 UCLASS(ClassGroup=(Audio), meta=(BlueprintSpawnableComponent))
 class FPS_SHOOTER_API USoundRayEmitterComponent : public UActorComponent
 {
@@ -48,6 +51,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Footsteps", meta=(ClampMin="0.0"))
 	float MinSpeedForFootsteps = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Footsteps")
+	bool bFootstepsEmitSoundRays = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Footsteps")
+	TObjectPtr<USoundBase> FootstepSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Footsteps")
+	TObjectPtr<USoundAttenuation> FootstepAttenuation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Footsteps", meta=(ClampMin="0.0"))
+	float FootstepPlaybackVolume = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Debug")
 	bool bDrawDebug = false; // Legacy asset compatibility; use SoundRays.Debug at runtime.

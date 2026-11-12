@@ -16,6 +16,6 @@ public class FPS_Shooter : ModuleRules
 			"AIModule",
 			"NavigationSystem"
 		});
-		PrivateDependencyModuleNames.Add("AnimationCore");
+		PrivateDependencyModuleNames.AddRange(new[] { "AnimationCore", "SlateCore" });
 	}
 }

@@ -6,9 +6,12 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "FallingSoundSphere.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -16,11 +19,13 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Particles/ParticleSystem.h"
 #include "SoundRayEmitterComponent.h"
 #include "StealthGameMode.h"
 #include "StealthArmsAnimInstance.h"
 #include "StealthInteractable.h"
+#include "StealthSupplyPickup.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -79,6 +84,21 @@ AStealthCharacter::AStealthCharacter()
 	WeaponMesh->SetOnlyOwnerSee(true);
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	WeaponMesh->CastShadow = false;
+	WeaponMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+
+	TreatmentPouch = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TreatmentPouch"));
+	TreatmentPouch->SetupAttachment(FirstPersonArms, TEXT("hand_l"));
+	TreatmentPouch->SetRelativeLocation(FVector(6, 1, -2));
+	TreatmentPouch->SetRelativeRotation(FRotator(0, 0, 12));
+	TreatmentPouch->SetRelativeScale3D(FVector(.13, .07, .045));
+	TreatmentPouch->SetOnlyOwnerSee(true);
+	TreatmentPouch->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	TreatmentPouch->SetVisibility(false);
+	TreatmentPouch->CastShadow = false;
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> PouchMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	TreatmentPouch->SetStaticMesh(PouchMesh.Object);
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> PouchFinish(TEXT("/Game/Industrial/Materials/M_SupplyCase.M_SupplyCase"));
+	TreatmentPouch->SetMaterial(0, PouchFinish.Object);
 
 	SoundEmitter = CreateDefaultSubobject<USoundRayEmitterComponent>(TEXT("SoundEmitter"));
 	SoundEmitter->Volume = WalkFootstepVolume;
@@ -90,6 +110,8 @@ AStealthCharacter::AStealthCharacter()
 	SoundEmitter->FootstepInterval = 0.48f;
 	SoundEmitter->MinSpeedForFootsteps = 25.0f;
 	SoundEmitter->bDrawDebug = false;
+	static ConstructorHelpers::FObjectFinder<USoundBase> ConcreteStep(TEXT("/Game/Audio/Stealth/ConcreteStep.ConcreteStep"));
+	SoundEmitter->FootstepSound = ConcreteStep.Object;
 
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> MannyMesh(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny.SKM_Manny"));
 	if (MannyMesh.Succeeded())
@@ -125,7 +147,7 @@ AStealthCharacter::AStealthCharacter()
 	ArmsRunAnimation = RifleRun.Object;
 	static ConstructorHelpers::FObjectFinder<UAnimSequence> RifleFire(TEXT("/Game/FirstPersonArms/Animations/FP_Rifle_Fire.FP_Rifle_Fire"));
 	ArmsFireAnimation = RifleFire.Object;
-	static ConstructorHelpers::FObjectFinder<UAnimSequence> RifleReload(TEXT("/Game/MilitaryWeapSilver/Weapons/Animations/Reload_Rifle_Hip_W.Reload_Rifle_Hip_W"));
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> RifleReload(TEXT("/Game/FirstPersonArms/Animations/FP_Assault_Rifle_Reload.FP_Assault_Rifle_Reload"));
 	WeaponReloadAnimation = RifleReload.Object;
 	static ConstructorHelpers::FObjectFinder<USoundBase> RifleReloadSound(TEXT("/Game/MilitaryWeapSilver/Sound/Rifle/Cues/Rifle_Reload_Cue.Rifle_Reload_Cue"));
 	ReloadSound = RifleReloadSound.Object;
@@ -148,6 +170,11 @@ void AStealthCharacter::BeginPlay()
 	Super::BeginPlay();
 	CurrentHealth = FMath::Max(1.0f, MaxHealth);
 	AmmoInMagazine = FMath::Max(1, MagazineSize);
+	ReserveAmmo = FMath::Clamp(ReserveAmmo, 0, GetReserveAmmoCapacity());
+	if (UMaterialInstanceDynamic* PouchFinish = TreatmentPouch->CreateDynamicMaterialInstance(0))
+	{
+		PouchFinish->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.19f, 0.04f, 0.03f));
+	}
 	ApplyInputMapping();
 	FirstPersonArms->SetRelativeLocation(HipArmsLocation);
 	FirstPersonArms->SetAnimationMode(EAnimationMode::AnimationSingleNode);
@@ -202,12 +229,15 @@ void AStealthCharacter::Tick(float DeltaSeconds)
 		PeakFallSpeed = FMath::Max(PeakFallSpeed, -GetVelocity().Z);
 	}
 	HitFeedback = FMath::FInterpConstantTo(HitFeedback, 0.0f, DeltaSeconds, 3.0f);
+	HitConfirmSeconds = FMath::Max(0.0f, HitConfirmSeconds - DeltaSeconds);
+	AmmoPickupFeedback = FMath::Max(0.0f, AmmoPickupFeedback - DeltaSeconds);
+	UpdateHealing(DeltaSeconds);
 	UpdateReload(DeltaSeconds);
-	bIsAiming = bWantsToAim && !bIsReloading && CanPerformMissionAction();
+	bIsAiming = bWantsToAim && !bIsReloading && !IsHealing() && CanPerformMissionAction();
 	UpdateMovementState();
 	TimeUntilNextShot = FMath::Max(0.0f, TimeUntilNextShot - DeltaSeconds);
 	FireAnimationTimeRemaining = FMath::Max(0.0f, FireAnimationTimeRemaining - DeltaSeconds);
-	if (bWantsToFire && TimeUntilNextShot <= 0.0f)
+	if ((bWantsToFire || bFireBuffered) && TimeUntilNextShot <= 0.0f)
 	{
 		FireWeapon();
 	}
@@ -346,20 +376,24 @@ void AStealthCharacter::ToggleCrouch()
 
 void AStealthCharacter::Interact()
 {
-	if (!CanPerformMissionAction())
+	if (!CanPerformMissionAction() || IsHealing())
 	{
 		return;
 	}
-	CancelReload();
 	if (AActor* Target = FindInteractionTarget())
 	{
+		if (!Target->IsA<AStealthSupplyPickup>()) { CancelReload(); }
 		IStealthInteractable::Execute_Interact(Target, this);
 	}
 }
 
 FText AStealthCharacter::GetInteractionPrompt() const
 {
-	AActor* Target = CanPerformMissionAction() ? FindInteractionTarget() : nullptr;
+	AActor* Target = CanPerformMissionAction() && !IsHealing() ? FindInteractionTarget() : nullptr;
+	if (const AStealthSupplyPickup* Supply = Cast<AStealthSupplyPickup>(Target))
+	{
+		return Supply->GetPromptFor(*this);
+	}
 	return Target ? IStealthInteractable::Execute_GetInteractionPrompt(Target) : FText::GetEmpty();
 }
 
@@ -367,7 +401,7 @@ AActor* AStealthCharacter::FindInteractionTarget() const
 {
 	FHitResult Hit;
 	const FVector Start = FollowCamera->GetComponentLocation();
-	const FVector End = Start + FollowCamera->GetForwardVector() * InteractionDistance;
+	const FVector End = Start + GetViewRotation().Vector() * InteractionDistance;
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(StealthInteraction), false, this);
 
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, QueryParams)
@@ -381,7 +415,7 @@ AActor* AStealthCharacter::FindInteractionTarget() const
 
 void AStealthCharacter::ThrowNoiseMaker()
 {
-	if (!CanPerformMissionAction() || NoiseMakerCount <= 0 || !NoiseMakerClass)
+	if (!CanPerformMissionAction() || IsHealing() || NoiseMakerCount <= 0 || !NoiseMakerClass)
 	{
 		return;
 	}
@@ -403,7 +437,7 @@ void AStealthCharacter::ThrowNoiseMaker()
 
 void AStealthCharacter::StartFire()
 {
-	if (!CanPerformMissionAction() || bIsReloading)
+	if (!CanPerformMissionAction() || bIsReloading || IsHealing())
 	{
 		return;
 	}
@@ -411,6 +445,10 @@ void AStealthCharacter::StartFire()
 	if (TimeUntilNextShot <= 0.0f)
 	{
 		FireWeapon();
+	}
+	else
+	{
+		bFireBuffered = AmmoInMagazine > 0;
 	}
 }
 
@@ -421,7 +459,8 @@ void AStealthCharacter::StopFire()
 
 void AStealthCharacter::FireWeapon()
 {
-	if (!CanPerformMissionAction() || bIsReloading || AmmoInMagazine <= 0)
+	bFireBuffered = false;
+	if (!CanPerformMissionAction() || bIsReloading || IsHealing() || AmmoInMagazine <= 0)
 	{
 		bWantsToFire = false;
 		return;
@@ -451,25 +490,28 @@ void AStealthCharacter::FireWeapon()
 		? WeaponMesh->GetSocketLocation(TEXT("MuzzleFlash")) : Eye;
 	const float Spread = FMath::Clamp(FMath::Lerp(HipSpreadDegrees, AimSpreadDegrees, AimAlpha), 0.0f, 12.0f);
 	const FVector ShotDirection = FMath::VRandCone(FollowCamera->GetForwardVector(), FMath::DegreesToRadians(Spread));
-	StealthBallistics::Fire(*this, Eye, Muzzle, Eye, ShotDirection, WeaponRange, WeaponDamage, ImpactEffects);
+	if (StealthBallistics::Fire(*this, Eye, Muzzle, Eye, ShotDirection, WeaponRange, WeaponDamage, ImpactEffects))
+	{
+		HitConfirmSeconds = HitConfirmDuration;
+	}
 }
 
 void AStealthCharacter::ReloadWeapon()
 {
-	if (!CanPerformMissionAction() || bIsReloading || AmmoInMagazine >= MagazineSize || ReserveAmmo <= 0)
+	if (!CanPerformMissionAction() || bIsReloading || IsHealing() || AmmoInMagazine >= MagazineSize || ReserveAmmo <= 0)
 	{
 		return;
 	}
 	bIsReloading = true;
 	ReloadElapsed = 0.0f;
 	bWantsToFire = false;
+	bFireBuffered = false;
 	bIsAiming = false;
 	FireAnimationTimeRemaining = 0.0f;
 	ArmsState = EStealthArmsState::Reload;
 	if (WeaponReloadAnimation)
 	{
-		WeaponMesh->PlayAnimation(WeaponReloadAnimation, false);
-		WeaponMesh->SetPlayRate(WeaponReloadAnimation->GetPlayLength() / FMath::Max(0.2f, ReloadDuration));
+		WeaponMesh->SetAnimation(WeaponReloadAnimation);
 	}
 	if (ReloadSound)
 	{
@@ -480,7 +522,7 @@ void AStealthCharacter::ReloadWeapon()
 void AStealthCharacter::StartAim()
 {
 	bWantsToAim = CanPerformMissionAction();
-	bIsAiming = bWantsToAim && !bIsReloading;
+	bIsAiming = bWantsToAim && !bIsReloading && !IsHealing();
 }
 
 void AStealthCharacter::StopAim()
@@ -499,6 +541,7 @@ float AStealthCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Dama
 	const float AppliedDamage = FMath::Clamp(
 		Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser), 0.0f, CurrentHealth);
 	if (AppliedDamage <= 0.0f) { return 0.0f; }
+	CancelHealing();
 	CurrentHealth -= AppliedDamage;
 	HitFeedback = FMath::Max(HitFeedback, FMath::GetMappedRangeValueClamped(
 		FVector2D(1.0f, 35.0f), FVector2D(0.35f, 1.0f), AppliedDamage));
@@ -532,13 +575,19 @@ bool AStealthCharacter::CanPerformMissionAction() const
 		(GameMode->GetMissionState() == EStealthMissionState::Playing && !GameMode->IsActorProtected(this)));
 }
 
-void AStealthCharacter::StopMissionActions()
+void AStealthCharacter::ReleaseHeldActions()
 {
 	bWantsToFire = false;
+	bFireBuffered = false;
 	bWantsToSprint = false;
-	bIsAiming = false;
-	bWantsToAim = false;
+	StopAim();
+}
+
+void AStealthCharacter::StopMissionActions()
+{
+	ReleaseHeldActions();
 	CancelReload();
+	CancelHealing();
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
 	SoundEmitter->SetComponentTickEnabled(false);
@@ -546,7 +595,8 @@ void AStealthCharacter::StopMissionActions()
 
 void AStealthCharacter::UpdateFirstPersonAnimation(float DeltaSeconds)
 {
-	ArmsState = bIsReloading ? EStealthArmsState::Reload
+	ArmsState = IsHealing() ? EStealthArmsState::Heal
+		: bIsReloading ? EStealthArmsState::Reload
 		: FireAnimationTimeRemaining > 0.0f ? EStealthArmsState::Fire
 		: bIsAiming ? EStealthArmsState::Aim
 		: bIsCrouched ? EStealthArmsState::Crouch
@@ -556,22 +606,26 @@ void AStealthCharacter::UpdateFirstPersonAnimation(float DeltaSeconds)
 void AStealthCharacter::UpdateMovementState()
 {
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	const bool bHealing = IsHealing();
 	if (bIsCrouched)
 	{
-		Movement->MaxWalkSpeed = bIsAiming ? FMath::Min(CrouchSpeed, AimCrouchSpeed) : CrouchSpeed;
+		Movement->MaxWalkSpeed = bHealing ? CrouchSpeed * 0.65f
+			: bIsAiming ? FMath::Min(CrouchSpeed, AimCrouchSpeed) : CrouchSpeed;
 		Movement->MaxWalkSpeedCrouched = Movement->MaxWalkSpeed;
 		SoundEmitter->Volume = CrouchFootstepVolume;
 		SoundEmitter->MaxDistance = CrouchFootstepDistance;
 		SoundEmitter->FootstepInterval = 0.62f;
+		SoundEmitter->FootstepPlaybackVolume = 0.30f;
 		return;
 	}
 
-	const bool bCanSprint = bWantsToSprint && !bIsAiming && !bIsReloading && GetVelocity().SizeSquared2D() > 1.0f;
+	const bool bCanSprint = bWantsToSprint && !bIsAiming && !bIsReloading && !bHealing && GetVelocity().SizeSquared2D() > 1.0f;
 	Movement->MaxWalkSpeed = bIsAiming ? FMath::Min(WalkSpeed, AimWalkSpeed)
-		: bIsReloading ? WalkSpeed * 0.7f : bCanSprint ? SprintSpeed : WalkSpeed;
+		: bHealing ? WalkSpeed * 0.42f : bIsReloading ? WalkSpeed * 0.7f : bCanSprint ? SprintSpeed : WalkSpeed;
 	SoundEmitter->Volume = bCanSprint ? SprintFootstepVolume : WalkFootstepVolume;
 	SoundEmitter->MaxDistance = bCanSprint ? SprintFootstepDistance : WalkFootstepDistance;
 	SoundEmitter->FootstepInterval = bCanSprint ? 0.32f : 0.48f;
+	SoundEmitter->FootstepPlaybackVolume = bCanSprint ? 0.88f : 0.62f;
 }
 
 void AStealthCharacter::CalibrateWeapon()
@@ -606,21 +660,104 @@ void AStealthCharacter::UpdateFirstPersonPose(float DeltaSeconds)
 	const float TargetTilt = bIsReloading ? FMath::SmoothStep(0.0f, 0.16f, GetReloadProgress())
 		* (1.0f - FMath::SmoothStep(0.82f, 1.0f, GetReloadProgress())) : 0.0f;
 	ReloadPoseTilt = FMath::FInterpTo(ReloadPoseTilt, TargetTilt, DeltaSeconds, 18.0f);
-	Offset += FVector(12, -10, 25) * ReloadPoseTilt;
+	const float Heal = GetHealingProgress();
+	const float TargetHealingPose = FMath::SmoothStep(0.0f, 0.23f, Heal) * (1.0f - FMath::SmoothStep(0.76f, 1.0f, Heal));
+	HealingPoseWeight = FMath::FInterpTo(HealingPoseWeight, TargetHealingPose, DeltaSeconds, 16.0f);
+	Offset += FVector(13, -8, 12) * ReloadPoseTilt;
+	Offset += FVector(18, 8, -12) * HealingPoseWeight;
 	Offset += FVector(-4.0f, 0.0f, -3.0f) * HitFeedback;
 	// Rotate around the grip, not the skeleton origin at the character's feet.
-	const FVector Pivot = FirstPersonArms->GetSocketTransform(TEXT("hand_r"), RTS_Component).GetLocation();
+	const FTransform HandInArms = FirstPersonArms->GetSocketTransform(TEXT("hand_r"), RTS_Component);
+	const FVector Pivot = HandInArms.GetLocation();
 	const FVector PivotInCamera = Target.TransformPosition(Pivot);
-	const FQuat TiltedRotation = FQuat::Slerp(FQuat::Identity, FQuat(FRotator(-8, 10, -20)), ReloadPoseTilt) * Target.GetRotation();
+	const FQuat TiltedRotation = FQuat::Slerp(FQuat::Identity, FQuat(FRotator(-23, 15, 14)), HealingPoseWeight)
+		* FQuat::Slerp(FQuat::Identity, FQuat(FRotator(2, -3, -12)), ReloadPoseTilt) * Target.GetRotation();
 	Target.SetRotation(TiltedRotation);
 	Target.SetLocation(PivotInCamera - TiltedRotation.RotateVector(Pivot));
 	Target.AddToTranslation(Offset);
+	if (const USkeletalMesh* Rifle = WeaponMesh->GetSkeletalMeshAsset(); Rifle &&
+		(bIsReloading || ReloadPoseTilt > 0.01f || HealingPoseWeight > 0.01f))
+	{
+		const FBoxSphereBounds Bounds = Rifle->GetImportedBounds().TransformBy(WeaponToHandTransform * HandInArms * Target);
+		const double RearDepth = Bounds.Origin.X - Bounds.BoxExtent.X;
+		const double Clearance = GEngine->NearClipPlane + 6.0;
+		Target.AddToTranslation(FVector(FMath::Max(0.0, Clearance - RearDepth), 0, 0));
+	}
 	FirstPersonArms->SetRelativeTransform(Target);
+}
+
+FVector AStealthCharacter::GetMagazineGripLocation() const
+{
+	if (!WeaponMesh->DoesSocketExist(TEXT("Clip_Bone"))) { return MagazineGripLocation; }
+	const FVector Clip = WeaponMesh->GetSocketTransform(TEXT("Clip_Bone"), RTS_Component).GetLocation();
+	return Clip + FVector(4.0, 0.0, -6.0);
 }
 
 float AStealthCharacter::GetReloadProgress() const
 {
 	return bIsReloading ? FMath::Clamp(ReloadElapsed / FMath::Max(0.2f, ReloadDuration), 0.0f, 1.0f) : 0.0f;
+}
+
+bool AStealthCharacter::TryResupplyAmmo(int32 Amount)
+{
+	if (!CanPerformMissionAction() || IsHealing() || Amount <= 0) { return false; }
+	const int32 Added = FMath::Min(Amount, GetReserveAmmoCapacity() - ReserveAmmo);
+	if (Added <= 0) { return false; }
+	ReserveAmmo += Added;
+	LastAmmoPickup = Added;
+	AmmoPickupFeedback = 1.6f;
+	return true;
+}
+
+bool AStealthCharacter::TryStartHealing(AStealthSupplyPickup& Supply)
+{
+	if (!CanPerformMissionAction() || IsHealing() || GetHealthFraction() >= 1.0f ||
+		Supply.GetKind() != EStealthSupplyKind::Medkit ||
+		FVector::DistSquared(FollowCamera->GetComponentLocation(), Supply.GetActorLocation()) > FMath::Square(InteractionDistance + 15.0f))
+	{
+		return false;
+	}
+	CancelReload();
+	ReleaseHeldActions();
+	FireAnimationTimeRemaining = 0.0f;
+	HealingElapsed = 0.0f;
+	HealingSupply = &Supply;
+	return true;
+}
+
+float AStealthCharacter::GetHealingProgress() const
+{
+	return IsHealing() ? FMath::Clamp(HealingElapsed / HealingDuration, 0.0f, 1.0f) : 0.0f;
+}
+
+void AStealthCharacter::CancelHealing()
+{
+	HealingSupply.Reset();
+	HealingElapsed = 0.0f;
+	TreatmentPouch->SetVisibility(false);
+}
+
+void AStealthCharacter::UpdateHealing(float DeltaSeconds)
+{
+	AStealthSupplyPickup* Supply = HealingSupply.Get();
+	if (!Supply || !CanPerformMissionAction() ||
+		FVector::DistSquared(FollowCamera->GetComponentLocation(), Supply->GetActorLocation()) > FMath::Square(InteractionDistance + 55.0f))
+	{
+		if (HealingElapsed > 0.0f || Supply) { CancelHealing(); }
+		return;
+	}
+	HealingElapsed += DeltaSeconds;
+	if (HealingElapsed >= HealingDuration)
+	{
+		CurrentHealth = FMath::Min(MaxHealth, CurrentHealth + FMath::Max(0.0f, Supply->GetHealingAmount()));
+		CancelHealing();
+		Supply->Consume(*this);
+	}
+	else
+	{
+		const float Progress = GetHealingProgress();
+		TreatmentPouch->SetVisibility(Progress > 0.19f && Progress < 0.78f);
+	}
 }
 
 float AStealthCharacter::GetShotAnimationAge() const
@@ -636,6 +773,7 @@ void AStealthCharacter::CancelReload()
 		bIsReloading = false;
 		ReloadElapsed = 0.0f;
 		WeaponMesh->SetAnimation(nullptr);
+		WeaponMesh->RefreshBoneTransforms();
 	}
 }
 
@@ -652,6 +790,12 @@ void AStealthCharacter::UpdateReload(float DeltaSeconds)
 		AmmoInMagazine += AmmoToLoad;
 		ReserveAmmo -= AmmoToLoad;
 		CancelReload();
+	}
+	else if (WeaponReloadAnimation)
+	{
+		// The magazine and the support hand follow the same reload clock.
+		WeaponMesh->SetPosition(GetReloadProgress() * WeaponReloadAnimation->GetPlayLength(), false);
+		WeaponMesh->RefreshBoneTransforms();
 	}
 }
 

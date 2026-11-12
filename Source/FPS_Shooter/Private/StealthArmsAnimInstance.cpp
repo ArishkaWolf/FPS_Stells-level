@@ -26,6 +26,9 @@ namespace
 				Aim = Player->GetAimAlpha();
 				ShotAge = Player->GetShotAnimationAge();
 				bReloading = Player->IsReloading();
+				bHealing = Player->IsHealing();
+				if (bHealing) { Heal = Player->GetHealingProgress(); }
+				HealWeight = FMath::FInterpTo(HealWeight, bHealing ? 1.0f : 0.0f, DeltaSeconds, 18.0f);
 				if (bReloading) { Reload = Player->GetReloadProgress(); }
 				ReloadWeight = FMath::FInterpTo(ReloadWeight, bReloading ? 1.0f : 0.0f, DeltaSeconds, 14.0f);
 				WeaponToHand = Player->GetWeaponToHandTransform();
@@ -34,7 +37,7 @@ namespace
 				const float Speed = Player->GetVelocity().Size2D();
 				const float MoveWeight = FMath::Clamp(Speed / 180.0f, 0.0f, 1.0f);
 				const float TargetRunWeight = MoveWeight * (Player->bIsCrouched ? 0.25f : 1.0f)
-					* FMath::Lerp(1.0f, 0.08f, Aim) * (bReloading ? 0.0f : 1.0f);
+					* FMath::Lerp(1.0f, 0.08f, Aim) * (bReloading || bHealing ? 0.0f : 1.0f);
 				RunWeight = FMath::FInterpTo(RunWeight, TargetRunWeight, DeltaSeconds, 9.0f);
 				IdleTime += DeltaSeconds * FMath::Lerp(1.0f, 0.45f, Aim);
 				RunTime += DeltaSeconds * FMath::Clamp(Speed / 350.0f, 0.35f, 1.6f);
@@ -82,7 +85,10 @@ namespace
 		float ShotAge = BIG_NUMBER;
 		float Reload = 0.0f;
 		float ReloadWeight = 0.0f;
+		float Heal = 0.0f;
+		float HealWeight = 0.0f;
 		bool bReloading = false;
+		bool bHealing = false;
 		FTransform WeaponToHand;
 		FVector MagazineGrip;
 		FVector Foregrip;
@@ -104,15 +110,20 @@ namespace
 			}
 			FCSPose<FCompactPose> ComponentPose;
 			ComponentPose.InitPose(Output.Pose);
-			// Raise the hands into ADS while keeping the shoulders below the camera near plane.
+			// Keep the shoulders below the view while the right hand maintains its grip.
 			const FTransform RightHandTarget = ComponentPose.GetComponentSpaceTransform(RightIndex);
 			const FCompactPoseBoneIndex SpineIndex = BoneIndex(TEXT("spine_05"));
 			const FCompactPoseBoneIndex RightUpperIndex = BoneIndex(TEXT("upperarm_r"));
 			const FCompactPoseBoneIndex RightLowerIndex = BoneIndex(TEXT("lowerarm_r"));
-			if (Aim > KINDA_SMALL_NUMBER && SpineIndex != INDEX_NONE && RightUpperIndex != INDEX_NONE && RightLowerIndex != INDEX_NONE)
+			const float ReloadClearance = ReloadWeight * FMath::SmoothStep(0.02f, 0.18f, Reload)
+				* (1.0f - FMath::SmoothStep(0.80f, 1.0f, Reload));
+			const float Treatment = HealWeight * FMath::SmoothStep(0.0f, 0.23f, Heal)
+				* (1.0f - FMath::SmoothStep(0.75f, 1.0f, Heal));
+			const float ShoulderDrop = FMath::Max3(12.0f * Aim, 27.0f * ReloadClearance, 23.0f * Treatment);
+			if (ShoulderDrop > KINDA_SMALL_NUMBER && SpineIndex != INDEX_NONE && RightUpperIndex != INDEX_NONE && RightLowerIndex != INDEX_NONE)
 			{
 				FTransform Spine = ComponentPose.GetComponentSpaceTransform(SpineIndex);
-				Spine.AddToTranslation(FVector(0, 0, -12.0f * Aim));
+				Spine.AddToTranslation(FVector(8.0f * ReloadClearance + 13.0f * Treatment, 0, -ShoulderDrop));
 				TArray<FBoneTransform> SpineTransform;
 				SpineTransform.Emplace(SpineIndex, Spine);
 				ComponentPose.LocalBlendCSBoneTransforms(SpineTransform, 1.0f);
@@ -136,17 +147,22 @@ namespace
 			const FTransform Weapon = WeaponToHand * ComponentPose.GetComponentSpaceTransform(RightIndex);
 			const FVector Support = Weapon.TransformPosition(Foregrip);
 			const FVector Magazine = Weapon.TransformPosition(MagazineGrip);
-			const FVector Down = Weapon.TransformVectorNoScale(FVector(0, 0, -1));
-			const FVector ChargingHandle = Weapon.TransformPosition(FVector(0, -12, 7));
-			const float Times[] = { 0.0f, 0.16f, 0.34f, 0.49f, 0.67f, 0.79f, 0.89f, 1.0f };
-			const FVector Points[] = { Support, Magazine, Magazine + Down * 14.0f,
-				Magazine + Down * 24.0f, Magazine, ChargingHandle, ChargingHandle + Down * 2.0f, Support };
-			int32 Segment = 0;
-			while (Segment < UE_ARRAY_COUNT(Times) - 2 && Reload > Times[Segment + 1]) { ++Segment; }
-			const float Alpha = FMath::SmoothStep(Times[Segment], Times[Segment + 1], Reload);
-			const FVector Target = FMath::Lerp(Support, FMath::Lerp(Points[Segment], Points[Segment + 1], Alpha), ReloadWeight);
-			const FVector ElbowTarget = Upper.GetLocation() + FVector(-15, -55, -25);
+			const float MagazineContact = FMath::SmoothStep(0.03f, 0.20f, Reload)
+				* (1.0f - FMath::SmoothStep(0.74f, 0.98f, Reload)) * ReloadWeight;
+			const FVector Side = Weapon.TransformVectorNoScale(FVector::XAxisVector);
+			FVector Target = FMath::Lerp(Support, Magazine, MagazineContact)
+				+ Side * (FMath::Sin(PI * MagazineContact) * 5.0f);
+			// Reach down for the pouch, bring it toward the body, then return to the foregrip.
+			const float Apply = FMath::SmoothStep(0.24f, 0.45f, Heal) * (1.0f - FMath::SmoothStep(0.66f, 0.85f, Heal));
+			const FVector PouchReach = Support + FVector(-4, -16, -19);
+			const FVector PouchApply = Support + FVector(12, -19, 14);
+			Target = FMath::Lerp(Target, FMath::Lerp(PouchReach, PouchApply, Apply), Treatment);
+			const FVector ElbowTarget = Upper.GetLocation() + FMath::Lerp(FVector(-15, -55, -25), FVector(2, -42, -50), Treatment);
+			const FQuat WristTurn(Side, FMath::DegreesToRadians(18.0f) * MagazineContact);
+			const FQuat TreatmentTurn(FVector::ForwardVector, FMath::DegreesToRadians(-18.0f) * Treatment);
+			const FQuat SupportRotation = Hand.GetRotation();
 			AnimationCore::SolveTwoBoneIK(Upper, Lower, Hand, ElbowTarget, Target, false, 1.0, 1.0);
+			Hand.SetRotation(TreatmentTurn * WristTurn * SupportRotation);
 			TArray<FBoneTransform> Transforms;
 			Transforms.Emplace(UpperIndex, Upper);
 			Transforms.Emplace(LowerIndex, Lower);

@@ -12,8 +12,13 @@ class FPS_SHOOTER_API AStealthPlayerController : public APlayerController
 public:
 	void ShowMissionResult();
 	void RestartMission();
+	bool IsMapOpen() const { return bMapOpen; }
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+
+private:
+	void ToggleMap();
+	bool bMapOpen = false;
 };
