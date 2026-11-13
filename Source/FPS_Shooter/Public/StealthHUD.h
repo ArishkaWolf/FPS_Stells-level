@@ -6,6 +6,7 @@
 
 class AStealthGameMode;
 class AStealthCharacter;
+class UTexture2D;
 
 UCLASS()
 class FPS_SHOOTER_API AStealthHUD : public AHUD
@@ -13,6 +14,7 @@ class FPS_SHOOTER_API AStealthHUD : public AHUD
 	GENERATED_BODY()
 
 public:
+	AStealthHUD();
 	virtual void DrawHUD() override;
 	virtual void NotifyHitBoxClick(FName BoxName) override;
 
@@ -23,4 +25,7 @@ private:
 
 	TArray<FBox2D> MapObstacles;
 	FBox2D MapBounds{ForceInit};
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> TacticalAerial;
 };

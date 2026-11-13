@@ -22,7 +22,8 @@ ANoiseMakerPickup::ANoiseMakerPickup()
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	MeshComponent->SetupAttachment(CollisionComponent);
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	MeshComponent->SetRelativeScale3D(FVector(0.24f));
+	MeshComponent->SetRelativeScale3D(FVector(0.36f));
+	MeshComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 6.0f));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	if (SphereMesh.Succeeded())

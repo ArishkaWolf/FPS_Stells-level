@@ -4,6 +4,7 @@
 #include "AudioDevice.h"
 #include "AudioThread.h"
 #include "Camera/CameraComponent.h"
+#include "CollisionQueryParams.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -146,12 +147,17 @@ public:
 			break;
 		case 9:
 			Capture(*World, TEXT("Industrial-Extraction"));
+			Player->SetActorLocation(FVector(1430, 6350, 98));
+			PC->SetControlRotation(FRotator(-5, 37, 0));
+			break;
+		case 10:
+			Capture(*World, TEXT("North-Service-01"));
 			if (FSceneViewport* Viewport = GetViewport(*World)) { Viewport->SetFixedViewportSize(0, 0); }
 			return true;
 		}
 
 		++Stage;
-		if (Stage == 2 || Stage == 4 || Stage == 6 || Stage == 8 || Stage == 9)
+		if (Stage == 2 || Stage == 4 || Stage == 6 || Stage == 8 || Stage == 9 || Stage == 10)
 		{
 			ReadyAt = World->GetTimeSeconds() + 0.5f;
 		}
@@ -199,6 +205,31 @@ private:
 		}
 		Test.TestEqual(TEXT("Both construction cranes are present"), Cranes, 2);
 		Test.TestTrue(TEXT("Imported assets dress the actual cover"), IndustrialCover >= 17);
+		int32 ConstructionProps = 0;
+		int32 SolidContainers = 0;
+		for (TActorIterator<AStaticMeshActor> It(&World); It; ++It)
+		{
+			UStaticMeshComponent* Mesh = It->GetStaticMeshComponent();
+			if (!Mesh || !Mesh->GetStaticMesh()) { continue; }
+			const FString AssetPath = Mesh->GetStaticMesh()->GetPathName();
+			if (!AssetPath.StartsWith(TEXT("/Game/Construction_VOL1/")) && !AssetPath.Contains(TEXT("SM_SiteRubble"))) { continue; }
+			++ConstructionProps;
+			Test.TestTrue(FString::Printf(TEXT("Construction prop blocks players and visibility: %s"), *It->GetName()),
+				Mesh->IsQueryCollisionEnabled() && Mesh->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block &&
+				Mesh->GetCollisionResponseToChannel(ECC_Visibility) == ECR_Block);
+			if (AssetPath.Contains(TEXT("SM_FreightContainer_01")))
+			{
+				const FVector Center = Mesh->Bounds.Origin;
+				const FVector Across(Mesh->Bounds.BoxExtent.X + 30.0, 0, 0);
+				FHitResult Hit;
+				if (Mesh->LineTraceComponent(Hit, Center - Across, Center + Across, FCollisionQueryParams()))
+				{
+					++SolidContainers;
+				}
+			}
+		}
+		Test.TestTrue(TEXT("Construction props include the north route dressing"), ConstructionProps >= 120);
+		Test.TestTrue(TEXT("The container walls block simple collision traces"), SolidContainers >= 20);
 		for (USkeletalMeshComponent* Mesh : TInlineComponentArray<USkeletalMeshComponent*>(&Player))
 		{
 			if (Mesh->GetFName() == TEXT("WeaponMesh")) { Rifle = Mesh; break; }
@@ -285,10 +316,20 @@ private:
 				}
 			}
 			Test.TestTrue(TEXT("The Cyrillic map title renders over its dark panel"), LightPixels > 60);
+			int32 AerialPixels = 0;
+			for (int32 Y = Size.Y * 25 / 100; Y < Size.Y * 72 / 100; Y += 2)
+			{
+				for (int32 X = Size.X * 17 / 100; X < Size.X * 65 / 100; X += 2)
+				{
+					const FColor& Pixel = Pixels[Y * Size.X + X];
+					AerialPixels += Pixel.R > 75 && Pixel.R > Pixel.B + 12 ? 1 : 0;
+				}
+			}
+			Test.TestTrue(TEXT("The tactical map shows the rendered construction yard"), AerialPixels > 1500);
 		}
 		TArray64<uint8> PNG;
 		FImageUtils::PNGCompressImageArray(Size.X, Size.Y, Pixels, PNG);
-		const FString Directory = FPaths::ProjectSavedDir() / TEXT("RussianMapWork/Screenshots");
+		const FString Directory = FPaths::ProjectSavedDir() / TEXT("NorthService/Screenshots");
 		IFileManager::Get().MakeDirectory(*Directory, true);
 		FFileHelper::SaveArrayToFile(PNG, *(Directory / (Name + TEXT(".png"))));
 	}

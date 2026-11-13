@@ -5,6 +5,7 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMeshActor.h"
+#include "Engine/Texture2D.h"
 #include "EngineFontServices.h"
 #include "EngineUtils.h"
 #include "Fonts/FontMeasure.h"
@@ -16,6 +17,7 @@
 #include "StealthObjective.h"
 #include "StealthPlayerController.h"
 #include "StealthSupplyPickup.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
@@ -94,6 +96,14 @@ struct FStealthCanvas
 	{
 		HUD.DrawLine(From.X * Scale, From.Y * Scale, To.X * Scale, To.Y * Scale, Color, Thickness * Scale);
 	}
+
+	void Triangle(FVector2D A, FVector2D B, FVector2D C, FLinearColor Color) const
+	{
+		FCanvasTriangleItem Item(A * Scale, B * Scale, C * Scale, GWhiteTexture);
+		Item.SetColor(Color);
+		Item.BlendMode = SE_BLEND_Translucent;
+		Surface.DrawItem(Item);
+	}
 };
 
 void DrawSupplyIcon(const FStealthCanvas& UI, FVector2D At, bool bMedkit, const FLinearColor& Color)
@@ -143,6 +153,12 @@ const TCHAR* StageCaption(EStealthMissionStage Stage)
 	default: return TEXT("ПРОНИКНОВЕНИЕ");
 	}
 }
+}
+
+AStealthHUD::AStealthHUD()
+{
+	static ConstructorHelpers::FObjectFinder<UTexture2D> Aerial(TEXT("/Game/Interface/T_SiteAerial.T_SiteAerial"));
+	TacticalAerial = Aerial.Object;
 }
 
 void AStealthHUD::DrawHUD()
@@ -263,20 +279,28 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 {
 	if (!MapBounds.bIsValid)
 	{
-		for (TActorIterator<AStaticMeshActor> It(GetWorld()); It; ++It)
+		// Match the orthographic capture of ThirdPersonMap in world centimeters.
+		if (TacticalAerial && GetWorld()->GetMapName().EndsWith(TEXT("ThirdPersonMap")))
 		{
-			const UStaticMeshComponent* Mesh = It->GetStaticMeshComponent();
-			if (!Mesh || !Mesh->IsQueryCollisionEnabled() || Mesh->GetCollisionResponseToChannel(ECC_Pawn) != ECR_Block
-				|| Mesh->Bounds.BoxExtent.Z < 35.0)
-			{
-				continue;
-			}
-			const FBox Bounds = Mesh->Bounds.GetBox();
-			const FBox2D Footprint(FVector2D(Bounds.Min), FVector2D(Bounds.Max));
-			MapObstacles.Add(Footprint);
-			MapBounds += Footprint;
+			MapBounds = FBox2D(FVector2D(-40, -28), FVector2D(12040, 8428));
 		}
-		if (MapBounds.bIsValid) { MapBounds = MapBounds.ExpandBy(250.0); }
+		else
+		{
+			for (TActorIterator<AStaticMeshActor> It(GetWorld()); It; ++It)
+			{
+				const UStaticMeshComponent* Mesh = It->GetStaticMeshComponent();
+				if (!Mesh || !Mesh->IsQueryCollisionEnabled() || Mesh->GetCollisionResponseToChannel(ECC_Pawn) != ECR_Block
+					|| Mesh->Bounds.BoxExtent.Z < 35.0)
+				{
+					continue;
+				}
+				const FBox Bounds = Mesh->Bounds.GetBox();
+				const FBox2D Footprint(FVector2D(Bounds.Min), FVector2D(Bounds.Max));
+				MapObstacles.Add(Footprint);
+				MapBounds += Footprint;
+			}
+			if (MapBounds.bIsValid) { MapBounds = MapBounds.ExpandBy(250.0); }
+		}
 	}
 
 	const FStealthCanvas UI(*this, *Canvas);
@@ -293,25 +317,22 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 		return;
 	}
 
-	const FVector2D MapAt = At + FVector2D(24, 64);
-	const FVector2D MapSize(494, 356);
+	const FVector2D MapAt = At + FVector2D(24, 60);
+	const FVector2D MapSize(513, 360);
 	UI.Box(FLinearColor(0.027f, 0.045f, 0.051f), MapAt, MapSize);
-	const FLinearColor Grid(0.049f, 0.074f, 0.081f);
-	for (double X = 24; X < MapSize.X; X += 24)
-	{
-		UI.Line(MapAt + FVector2D(X, 0), MapAt + FVector2D(X, MapSize.Y), Grid);
-	}
-	for (double Y = 24; Y < MapSize.Y; Y += 24)
-	{
-		UI.Line(MapAt + FVector2D(0, Y), MapAt + FVector2D(MapSize.X, Y), Grid);
-	}
 	const FVector2D Extent = MapBounds.GetSize();
-	const double Fit = FMath::Min((MapSize.X - 24) / Extent.X, (MapSize.Y - 24) / Extent.Y);
+	const double Fit = FMath::Min(MapSize.X / Extent.X, MapSize.Y / Extent.Y);
 	const FVector2D TopLeft = MapAt + (MapSize - Extent * Fit) * 0.5;
 	const auto ProjectMap = [this, TopLeft, Fit](FVector2D Position)
 	{
 		return TopLeft + FVector2D(Position.X - MapBounds.Min.X, MapBounds.Max.Y - Position.Y) * Fit;
 	};
+	if (TacticalAerial && MapObstacles.IsEmpty())
+	{
+		DrawTextureSimple(TacticalAerial, TopLeft.X * UI.Scale, TopLeft.Y * UI.Scale,
+			Extent.X * Fit * UI.Scale / TacticalAerial->GetSizeX(), false);
+		UI.Box(FLinearColor(0.008f, 0.016f, 0.020f, 0.19f), TopLeft, Extent * Fit);
+	}
 	for (const FBox2D& Obstacle : MapObstacles)
 	{
 		const FVector2D Position = ProjectMap(FVector2D(Obstacle.Min.X, Obstacle.Max.Y));
@@ -324,6 +345,29 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 	const FLinearColor ExitColor = bHasIntel ? (bPursued ? Amber : Mint) : Muted;
 	const FLinearColor IntelColor = bHasIntel ? Muted : Amber;
 	const FLinearColor PlayerColor(0.48f, 0.81f, 1.0f);
+	const FVector2D PlayerPin = ProjectMap(FVector2D(Character.GetActorLocation()));
+	const float ViewYaw = Character.GetViewRotation().Yaw;
+	const FVector2D Forward = FVector2D(FMath::Cos(FMath::DegreesToRadians(ViewYaw)), -FMath::Sin(FMath::DegreesToRadians(ViewYaw)));
+	const FVector2D Side(-Forward.Y, Forward.X);
+	FLinearColor Sector = PlayerColor;
+	Sector.A = 0.28f;
+	for (int32 Step = 0; Step < 12; ++Step)
+	{
+		const auto Edge = [&](int32 Index)
+		{
+			const float Angle = FMath::DegreesToRadians(-34.0f + 68.0f * Index / 12.0f);
+			const FVector2D Point = PlayerPin + (Forward * FMath::Cos(Angle) + Side * FMath::Sin(Angle)) * 39.0;
+			return FVector2D(FMath::Clamp(Point.X, MapAt.X, MapAt.X + MapSize.X),
+				FMath::Clamp(Point.Y, MapAt.Y, MapAt.Y + MapSize.Y));
+		};
+		UI.Triangle(PlayerPin, Edge(Step), Edge(Step + 1), Sector);
+	}
+	if (MapObstacles.IsEmpty())
+	{
+		UI.Center(TEXT("СЕВЕРНЫЙ ОБХОД"), ProjectMap(FVector2D(5600, 8100)), Ink, 0.79f, Bold);
+		UI.Center(TEXT("КОНТЕЙНЕРНЫЙ ДВОР"), ProjectMap(FVector2D(6240, 600)), Ink, 0.79f, Bold);
+	}
+	TOptional<FVector> Destination;
 	for (TActorIterator<AStealthSupplyPickup> It(GetWorld()); It; ++It)
 	{
 		const FVector2D Pin = ProjectMap(FVector2D(It->GetActorLocation()));
@@ -333,6 +377,7 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 	}
 	for (TActorIterator<AStealthObjective> It(GetWorld()); It && !bHasIntel; ++It)
 	{
+		Destination = It->GetActorLocation();
 		const FVector2D Pin = ProjectMap(FVector2D(It->GetActorLocation()));
 		UI.Box(Panel, Pin - FVector2D(7, 7), FVector2D(14, 14));
 		UI.Box(IntelColor, Pin - FVector2D(4, 4), FVector2D(8, 8));
@@ -340,26 +385,39 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 	}
 	for (TActorIterator<AStealthExitZone> It(GetWorld()); It; ++It)
 	{
+		if (bHasIntel) { Destination = It->GetActorLocation(); }
 		const FVector2D Pin = ProjectMap(FVector2D(It->GetActorLocation()));
 		UI.Box(ExitColor, Pin - FVector2D(8, 8), FVector2D(16, 16));
 		UI.Box(Panel, Pin - FVector2D(5, 5), FVector2D(10, 10));
 		UI.Text(TEXT("Эвакуация"), Pin + FVector2D(12, -7), ExitColor, 0.86f);
 	}
 
-	const FVector2D PlayerPin = ProjectMap(FVector2D(Character.GetActorLocation()));
-	const FVector Facing = Character.GetViewRotation().Vector();
-	const FVector2D Forward = FVector2D(Facing.X, -Facing.Y).GetSafeNormal();
-	const FVector2D Side(-Forward.Y, Forward.X);
-	const FVector2D Tip = PlayerPin + Forward * 10.0;
-	const FVector2D Back = PlayerPin - Forward * 5.0;
-	UI.Line(Tip, Back + Side * 5.0, PlayerColor, 2.5f);
-	UI.Line(Tip, Back - Side * 5.0, PlayerColor, 2.5f);
-	UI.Line(Back + Side * 5.0, Back - Side * 5.0, PlayerColor, 2.5f);
-	UI.Center(TEXT("С"), MapAt + FVector2D(MapSize.X - 15, 15), Muted, 0.82f);
+	const FVector2D Tip = PlayerPin + Forward * 19.0;
+	const FVector2D Tail = PlayerPin - Forward * 7.0;
+	const FVector2D Left = Tail + Side * 7.0;
+	const FVector2D Right = Tail - Side * 7.0;
+	UI.Line(Tail, PlayerPin + Forward * 38.0, Panel, 3.4f);
+	UI.Line(Tail, PlayerPin + Forward * 38.0, PlayerColor, 1.35f);
+	UI.Triangle(Tip, Left, PlayerPin, PlayerColor);
+	UI.Triangle(Tip, PlayerPin, Right, PlayerColor);
+	UI.Line(Tip, Left, Panel, 1.25f);
+	UI.Line(Tip, Right, Panel, 1.25f);
+	UI.Line(Left, PlayerPin, Panel, 1.25f);
+	UI.Line(Right, PlayerPin, Panel, 1.25f);
+	const FVector2D North = MapAt + FVector2D(MapSize.X - 20, 25);
+	UI.Box(Panel, North - FVector2D(12, 16), FVector2D(24, 39));
+	UI.Center(TEXT("С"), North - FVector2D(0, 7), Ink, 0.88f, Bold);
+	UI.Triangle(North + FVector2D(0, 2), North + FVector2D(-5, 16), North + FVector2D(5, 16), Ink);
+	const FVector2D Ruler = MapAt + FVector2D(MapSize.X - 15 - 2000 * Fit, MapSize.Y - 14);
+	UI.Line(Ruler, Ruler + FVector2D(2000 * Fit, 0), Ink, 1.5f);
+	UI.Center(TEXT("20 м"), Ruler + FVector2D(1000 * Fit, -9), Ink, 0.72f);
 
-	const FVector2D Legend = At + FVector2D(542, 72);
+	const FVector2D Legend = At + FVector2D(555, 72);
 	UI.Text(TEXT("ОБОЗНАЧЕНИЯ"), Legend, Muted, 0.82f);
-	UI.Text(TEXT("Вы"), Legend + FVector2D(0, 31), PlayerColor);
+	const TCHAR* Headings[] = {TEXT("В"), TEXT("СВ"), TEXT("С"), TEXT("СЗ"), TEXT("З"), TEXT("ЮЗ"), TEXT("Ю"), TEXT("ЮВ")};
+	const int32 Heading = FMath::RoundToInt(ViewYaw / 45.0f);
+	UI.Text(FString::Printf(TEXT("Вы смотрите на %s"), Headings[(Heading % 8 + 8) % 8]),
+		Legend + FVector2D(0, 31), PlayerColor);
 	UI.Text(bHasIntel ? TEXT("Данные получены") : TEXT("Заберите данные"), Legend + FVector2D(0, 65), IntelColor);
 	UI.Text(TEXT("Точка эвакуации"), Legend + FVector2D(0, 99), ExitColor);
 	const TCHAR* ExitStatus = !bHasIntel ? TEXT("Откроется после сбора данных")
@@ -370,6 +428,12 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 	const TCHAR* Active = bPursued ? TEXT("Оторвитесь от охраны")
 		: bHasIntel ? TEXT("Идите к эвакуации") : TEXT("Идите к данным");
 	UI.Text(Active, Legend + FVector2D(0, 205), Mint);
+	if (Destination)
+	{
+		UI.Text(FString::Printf(TEXT("%d м по прямой"), FMath::RoundToInt(
+			FVector::Dist2D(Character.GetActorLocation(), Destination.GetValue()) / 100.0)),
+			Legend + FVector2D(0, 225), Muted, 0.85f);
+	}
 	DrawSupplyIcon(UI, Legend + FVector2D(6, 254), true, AidColor);
 	UI.Text(TEXT("Аптечка"), Legend + FVector2D(19, 247), Ink, 0.9f);
 	DrawSupplyIcon(UI, Legend + FVector2D(6, 279), false, Amber);
