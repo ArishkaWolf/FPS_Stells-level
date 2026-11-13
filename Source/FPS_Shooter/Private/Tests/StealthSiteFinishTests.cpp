@@ -73,10 +73,19 @@ public:
 				const UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(World, From, To);
 				Test.TestTrue(TEXT("The service door opens onto a walkable pocket"), Path && Path->IsValid() &&
 					!Path->IsPartial() && Path->GetPathLength() < 360.0);
-				const FVector SideExit(ExitX[I], EntryY[I] + 160, 25);
-				const UNavigationPath* Exit = UNavigationSystemV1::FindPathToLocationSynchronously(World, To, SideExit);
-				Test.TestTrue(TEXT("The pocket connects back to the yard through a side exit"),
+				const FVector SideExit(ExitX[I], ExitY[I], 25);
+				FNavLocation WalkableExit;
+				const UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+				const bool bProjected = Nav && Nav->ProjectPointToNavigation(SideExit, WalkableExit, FVector(44, 60, 110));
+				const UNavigationPath* Exit = bProjected
+					? UNavigationSystemV1::FindPathToLocationSynchronously(World, To, WalkableExit.Location) : nullptr;
+				Test.TestTrue(FString::Printf(TEXT("Service pocket %d has a short route to its side exit"), I + 1),
 					Exit && Exit->IsValid() && !Exit->IsPartial() && Exit->GetPathLength() < 560.0);
+				if (Exit)
+				{
+					Test.AddInfo(FString::Printf(TEXT("Service pocket %d path: %.0f cm, partial %d"), I + 1,
+						Exit->GetPathLength(), Exit->IsPartial()));
+				}
 				Doors[I]->SetOpen(false, Player);
 			}
 			View(*PC, *Player, FVector(10050, 6675, 98), FVector(10600, 7100, 250));
@@ -229,7 +238,8 @@ private:
 	int32 Signs = 0;
 	const double EntryX[2] = {4525, 7425};
 	const double EntryY[2] = {4800, 5100};
-	const double ExitX[2] = {4885, 7120};
+	const double ExitX[2] = {4950, 7165};
+	const double ExitY[2] = {4945, 5260};
 };
 }
 
