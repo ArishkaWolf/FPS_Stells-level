@@ -290,7 +290,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStealthCombatTest, "FPS_Shooter.Combat.Ballist
 
 bool FStealthCombatTest::RunTest(const FString& Parameters)
 {
-	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Maps/ThirdPersonMap"), true)) { return false; }
+	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true)) { return false; }
 	ADD_LATENT_AUTOMATION_COMMAND(FCombatPIECheck(*this));
 	return true;
 }

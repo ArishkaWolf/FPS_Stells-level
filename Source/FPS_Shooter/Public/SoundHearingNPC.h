@@ -58,6 +58,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Patrol")
 	FName PatrolRouteName = TEXT("Default");
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mission")
+	bool bCarriesKeycard = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Movement", meta=(ClampMin="0.0"))
 	float PatrolSpeed = 180.0f;
 

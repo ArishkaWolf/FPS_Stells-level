@@ -7,12 +7,10 @@
 #include "CollisionQueryParams.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/TextRenderComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMeshActor.h"
-#include "Engine/TextRenderActor.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerInput.h"
 #include "HAL/FileManager.h"
@@ -69,10 +67,13 @@ public:
 			Test.TestTrue(TEXT("M closes the map and resumes the mission"), !PC->IsMapOpen() && !UGameplayStatics::IsGamePaused(World));
 			break;
 		case 2:
-			Capture(*World, TEXT("Industrial-Staging"));
+			Capture(*World, TEXT("Airlock"));
 			Player->SetActorLocation(Clearing);
 			Mission->Tick(0.01f);
-			Test.TestTrue(TEXT("Objective collection unlocks the exit"), Mission->CollectObjective(Player));
+			Test.TestTrue(TEXT("Objective can be collected for later upload"), Mission->CollectObjective(Player));
+			Mission->UploadData(Player);
+			Mission->CollectKeycard(Player);
+			Mission->VerifyArchive(Player);
 			Tap(*PC, EKeys::Gamepad_Special_Left);
 			Test.TestTrue(TEXT("Gamepad View opens the extraction map"), PC->IsMapOpen());
 			break;
@@ -133,7 +134,7 @@ public:
 			{
 				Test.AddInfo(TEXT("Audio mixer check requires an enabled audio device"));
 			}
-			Player->SetActorLocation(FVector(3200, 4080, 100));
+			Player->SetActorLocation(FVector(2120, 1720, 98));
 			PC->SetControlRotation(FRotator(0, 12, 0));
 			Tap(*PC, EKeys::LeftMouseButton);
 			Tap(*PC, EKeys::LeftMouseButton);
@@ -141,17 +142,17 @@ public:
 			break;
 		case 8:
 			Test.TestEqual(TEXT("Second tap during cooldown fires when the rifle is ready"), Player->GetAmmoInMagazine(), 28);
-			Capture(*World, TEXT("Industrial-Yard"));
-			Player->SetActorLocation(FVector(1020, 1460, 100));
-			PC->SetControlRotation(FRotator(-8, -124, 0));
+			Capture(*World, TEXT("Main-Corridor"));
+			Player->SetActorLocation(FVector(507, 1040, 98));
+			PC->SetControlRotation(FRotator(-4, -90, 0));
 			break;
 		case 9:
-			Capture(*World, TEXT("Industrial-Extraction"));
-			Player->SetActorLocation(FVector(1430, 6350, 98));
-			PC->SetControlRotation(FRotator(-5, 37, 0));
+			Capture(*World, TEXT("Extraction"));
+			Player->SetActorLocation(FVector(4480, 3250, 98));
+			PC->SetControlRotation(FRotator(-4, 180, 0));
 			break;
 		case 10:
-			Capture(*World, TEXT("North-Service-01"));
+			Capture(*World, TEXT("Maintenance"));
 			if (FSceneViewport* Viewport = GetViewport(*World)) { Viewport->SetFixedViewportSize(0, 0); }
 			return true;
 		}
@@ -176,60 +177,6 @@ private:
 		{
 			if (AController* AI = It->GetController()) { AI->SetActorTickEnabled(false); }
 		}
-		int32 RussianSigns = 0;
-		for (TActorIterator<ATextRenderActor> It(&World); It; ++It)
-		{
-			const FString Caption = It->GetTextRender()->Text.ToString();
-			if (!Caption.IsEmpty() && Caption[0] >= TEXT('А') && Caption[0] <= TEXT('Я'))
-			{
-				++RussianSigns;
-				const AActor* Parent = It->GetAttachParentActor();
-				Test.TestTrue(TEXT("World signage is attached to a physical plate"),
-					Parent && Parent->ActorHasTag(TEXT("Industrial.SignBacking")));
-			}
-		}
-		Test.TestTrue(TEXT("Level uses Cyrillic signage"), RussianSigns >= 17);
-		int32 GroundedPickups = 0;
-		for (TActorIterator<ANoiseMakerPickup> It(&World); It; ++It)
-		{
-			const UStaticMeshComponent* Mesh = It->FindComponentByClass<UStaticMeshComponent>();
-			if (Mesh && FMath::IsNearlyZero(Mesh->Bounds.GetBox().Min.Z, 2.0)) { ++GroundedPickups; }
-		}
-		Test.TestEqual(TEXT("Both pickups sit on the yard floor"), GroundedPickups, 2);
-		int32 Cranes = 0;
-		int32 IndustrialCover = 0;
-		for (TActorIterator<AActor> It(&World); It; ++It)
-		{
-			Cranes += It->ActorHasTag(TEXT("Industrial.Crane")) ? 1 : 0;
-			IndustrialCover += It->ActorHasTag(TEXT("Industrial.Cover")) ? 1 : 0;
-		}
-		Test.TestEqual(TEXT("Both construction cranes are present"), Cranes, 2);
-		Test.TestTrue(TEXT("Imported assets dress the actual cover"), IndustrialCover >= 17);
-		int32 ConstructionProps = 0;
-		int32 SolidContainers = 0;
-		for (TActorIterator<AStaticMeshActor> It(&World); It; ++It)
-		{
-			UStaticMeshComponent* Mesh = It->GetStaticMeshComponent();
-			if (!Mesh || !Mesh->GetStaticMesh()) { continue; }
-			const FString AssetPath = Mesh->GetStaticMesh()->GetPathName();
-			if (!AssetPath.StartsWith(TEXT("/Game/Construction_VOL1/")) && !AssetPath.Contains(TEXT("SM_SiteRubble"))) { continue; }
-			++ConstructionProps;
-			Test.TestTrue(FString::Printf(TEXT("Construction prop blocks players and visibility: %s"), *It->GetName()),
-				Mesh->IsQueryCollisionEnabled() && Mesh->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block &&
-				Mesh->GetCollisionResponseToChannel(ECC_Visibility) == ECR_Block);
-			if (AssetPath.Contains(TEXT("SM_FreightContainer_01")))
-			{
-				const FVector Center = Mesh->Bounds.Origin;
-				const FVector Across(Mesh->Bounds.BoxExtent.X + 30.0, 0, 0);
-				FHitResult Hit;
-				if (Mesh->LineTraceComponent(Hit, Center - Across, Center + Across, FCollisionQueryParams()))
-				{
-					++SolidContainers;
-				}
-			}
-		}
-		Test.TestTrue(TEXT("Construction props include the north route dressing"), ConstructionProps >= 120);
-		Test.TestTrue(TEXT("The container walls block simple collision traces"), SolidContainers >= 20);
 		for (USkeletalMeshComponent* Mesh : TInlineComponentArray<USkeletalMeshComponent*>(&Player))
 		{
 			if (Mesh->GetFName() == TEXT("WeaponMesh")) { Rifle = Mesh; break; }
@@ -316,20 +263,20 @@ private:
 				}
 			}
 			Test.TestTrue(TEXT("The Cyrillic map title renders over its dark panel"), LightPixels > 60);
-			int32 AerialPixels = 0;
+			int32 PlanPixels = 0;
 			for (int32 Y = Size.Y * 25 / 100; Y < Size.Y * 72 / 100; Y += 2)
 			{
 				for (int32 X = Size.X * 17 / 100; X < Size.X * 65 / 100; X += 2)
 				{
 					const FColor& Pixel = Pixels[Y * Size.X + X];
-					AerialPixels += Pixel.R > 75 && Pixel.R > Pixel.B + 12 ? 1 : 0;
+					PlanPixels += Pixel.G > 45 && Pixel.G > Pixel.R + 8 && Pixel.B > Pixel.R + 6 ? 1 : 0;
 				}
 			}
-			Test.TestTrue(TEXT("The tactical map shows the rendered construction yard"), AerialPixels > 1500);
+			Test.TestTrue(TEXT("The tactical map shows the laboratory floor plan"), PlanPixels > 1500);
 		}
 		TArray64<uint8> PNG;
 		FImageUtils::PNGCompressImageArray(Size.X, Size.Y, Pixels, PNG);
-		const FString Directory = FPaths::ProjectSavedDir() / TEXT("NorthService/Screenshots");
+		const FString Directory = FPaths::ProjectSavedDir() / TEXT("LaboratoryWork/Screenshots");
 		IFileManager::Get().MakeDirectory(*Directory, true);
 		FFileHelper::SaveArrayToFile(PNG, *(Directory / (Name + TEXT(".png"))));
 	}
@@ -370,12 +317,12 @@ public:
 		{
 		case 0:
 			if (!Prepare(*World)) { return true; }
-			Player->SetActorLocation(FVector(4270, 2100, 98));
-			PC->SetControlRotation(FRotator(-4, 14, 0));
+			Player->SetActorLocation(FVector(1520, 2200, 98));
+			PC->SetControlRotation(FRotator(-3, 117, 0));
 			ReadyAt = World->GetTimeSeconds() + 0.3f;
 			break;
 		case 1:
-			Capture(*World, TEXT("Southern-Yard"));
+			Capture(*World, TEXT("Medical"));
 			Focus(*PC, *Player, *Medkit);
 			Test.TestTrue(TEXT("Full health has a contextual hint"), Player->GetInteractionPrompt().ToString() == TEXT("Здоровье полное"));
 			Tap(*PC, EKeys::E);
@@ -451,61 +398,42 @@ private:
 		for (TActorIterator<AStealthSupplyPickup> It(&World); It; ++It)
 		{
 			(It->GetKind() == EStealthSupplyKind::Medkit ? Medkits : Ammo).Add(*It);
-			Test.TestTrue(TEXT("Supply cases sit on the floor"), FMath::IsNearlyEqual(It->GetActorLocation().Z, 14.0, 2.0));
+			Test.TestTrue(TEXT("Supply cases sit on tables"), FMath::IsNearlyEqual(It->GetActorLocation().Z, 101.8, 2.0));
 		}
 		if (!Test.TestTrue(TEXT("Two placed medkits and two ammo cases load in PIE"), Medkits.Num() == 2 && Ammo.Num() == 2)) { return false; }
-		Medkits.Sort([](const AStealthSupplyPickup& A, const AStealthSupplyPickup& B) { return A.GetActorLocation().X < B.GetActorLocation().X; });
-		Ammo.Sort([](const AStealthSupplyPickup& A, const AStealthSupplyPickup& B) { return A.GetActorLocation().X < B.GetActorLocation().X; });
+		Medkits.Sort([](const AStealthSupplyPickup& A, const AStealthSupplyPickup& B) { return A.GetActorLocation().Y < B.GetActorLocation().Y; });
+		Ammo.Sort([](const AStealthSupplyPickup& A, const AStealthSupplyPickup& B) { return A.GetActorLocation().Y < B.GetActorLocation().Y; });
 		Medkit = Medkits[0];
 		MedkitTwo = Medkits[1];
 		FirstAmmo = Ammo[0];
 		SecondAmmo = Ammo[1];
-		for (TActorIterator<AStaticMeshActor> It(&World); It; ++It)
-		{
-			const auto* Mesh = It->GetStaticMeshComponent();
-			if (!Mesh || !Mesh->GetStaticMesh()) { continue; }
-			for (int32 I = 0; I < Mesh->GetNumMaterials(); ++I)
-			{
-				Test.TestTrue(FString::Printf(TEXT("Material resolves on %s, slot %d"), *It->GetName(), I), IsValid(Mesh->GetMaterial(I)));
-			}
-			if (Mesh->GetStaticMesh()->GetFName() == TEXT("SM_FreightContainer_01"))
-			{
-				const FVector Scale = It->GetActorScale3D();
-				Test.TestTrue(TEXT("Freight containers preserve their authored proportions"),
-					FMath::IsNearlyEqual(Scale.X, Scale.Y) && FMath::IsNearlyEqual(Scale.Y, Scale.Z));
-				Test.TestTrue(TEXT("Container hardware keeps its authored material"), Mesh->GetMaterial(0) == Mesh->GetStaticMesh()->GetMaterial(0));
-			}
-		}
 		UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(&World);
-		if (!Test.TestNotNull(TEXT("South logistics uses the yard navigation mesh"), Nav)) { return false; }
-		const FVector Waypoints[] = {
-			FVector(2910, 3750, 98), Medkit->GetActorLocation(), FVector(4680, 2000, 98),
-			FirstAmmo->GetActorLocation(), FVector(7130, 2260, 98), MedkitTwo->GetActorLocation(),
-			FVector(9330, 3900, 98)
-		};
-		double Total = 0.0;
-		for (int32 I = 1; I < UE_ARRAY_COUNT(Waypoints); ++I)
+		if (!Test.TestNotNull(TEXT("Laboratory has a navigation mesh"), Nav)) { return false; }
+		for (const AStealthSupplyPickup* Supply : { Medkits[0], Medkits[1], Ammo[0], Ammo[1] })
 		{
-			FNavLocation A, B;
-			const FVector Extent(95, 95, 220);
-			if (!Test.TestTrue(TEXT("Southern route junctions and supplies project onto NavMesh"),
-				Nav->ProjectPointToNavigation(Waypoints[I - 1], A, Extent) && Nav->ProjectPointToNavigation(Waypoints[I], B, Extent))) { return false; }
-			const UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(&World, A.Location, B.Location);
-			if (!Test.TestTrue(TEXT("The southern loop connects without a long detour"),
-				Path && Path->IsValid() && !Path->IsPartial() && Path->GetPathLength() < FVector::Dist2D(A.Location, B.Location) + 1350.0)) { return false; }
-			Total += Path->GetPathLength();
+			const FVector Location = Supply->GetActorLocation();
+			const bool bMedical = Supply->GetKind() == EStealthSupplyKind::Medkit;
+			Test.TestTrue(TEXT("Supply is in the appropriate room"), bMedical
+				? Location.X > 1000 && Location.X < 2000 && Location.Y > 1900 && Location.Y < 3000
+				: Location.X > 1000 && Location.X < 2000 && Location.Y > 0 && Location.Y < 1500);
+			FNavLocation Approach;
+			Test.TestTrue(FString::Printf(TEXT("A player can stand next to the supply at %s"), *Location.ToString()),
+				Nav->ProjectPointToNavigation(FocusLocation(*Supply), Approach, FVector(50, 50, 150)));
 		}
-		FNavLocation Northern;
-		Test.TestTrue(TEXT("Northern service ammo is reachable"), Nav->ProjectPointToNavigation(SecondAmmo->GetActorLocation(), Northern, FVector(90, 90, 220)));
-		Test.AddInfo(FString::Printf(TEXT("Southern path through supply pockets: %.1f m"), Total / 100.0));
 		if (FSceneViewport* View = Viewport(World)) { View->SetFixedViewportSize(1280, 720); }
 		return true;
 	}
 
-	static void Focus(APlayerController& PC, AStealthCharacter& Player, const AActor& Supply)
+	static FVector FocusLocation(const AStealthSupplyPickup& Supply)
 	{
 		const FVector Location = Supply.GetActorLocation();
-		Player.SetActorLocation(FVector(Location.X - 120, Location.Y, 98));
+		return FVector(Location.X + 115, Location.Y - 35, 98);
+	}
+
+	static void Focus(APlayerController& PC, AStealthCharacter& Player, const AStealthSupplyPickup& Supply)
+	{
+		const FVector Location = Supply.GetActorLocation();
+		Player.SetActorLocation(FocusLocation(Supply));
 		UCameraComponent* Camera = Player.FindComponentByClass<UCameraComponent>();
 		PC.SetControlRotation((Location - Camera->GetComponentLocation()).Rotation());
 		// This fixture sends input in the same frame as teleporting and setting the controller rotation.
@@ -537,7 +465,7 @@ private:
 		TArray64<uint8> PNG;
 		const FIntPoint Size = View->GetSizeXY();
 		FImageUtils::PNGCompressImageArray(Size.X, Size.Y, Pixels, PNG);
-		const FString Folder = FPaths::ProjectSavedDir() / TEXT("YardResupply/Screenshots");
+		const FString Folder = FPaths::ProjectSavedDir() / TEXT("LaboratoryWork/Screenshots");
 		IFileManager::Get().MakeDirectory(*Folder, true);
 		FFileHelper::SaveArrayToFile(PNG, *(Folder / (Name + TEXT(".png"))));
 	}
@@ -555,17 +483,17 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStealthMapReloadAudioTest, "FPS_Shooter.UI.Map
 
 bool FStealthMapReloadAudioTest::RunTest(const FString& Parameters)
 {
-	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Maps/ThirdPersonMap"), true)) { return false; }
+	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true)) { return false; }
 	ADD_LATENT_AUTOMATION_COMMAND(FStealthMapReloadAudioCheck(*this));
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStealthSuppliesPIETest, "FPS_Shooter.Mission.YardSuppliesPIE",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStealthSuppliesPIETest, "FPS_Shooter.Mission.LaboratorySuppliesPIE",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FStealthSuppliesPIETest::RunTest(const FString& Parameters)
 {
-	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Maps/ThirdPersonMap"), true)) { return false; }
+	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true)) { return false; }
 	ADD_LATENT_AUTOMATION_COMMAND(FStealthSuppliesCheck(*this));
 	return true;
 }

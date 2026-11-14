@@ -62,6 +62,7 @@ public:
 	void StopMissionActions();
 	void ReleaseHeldActions();
 	bool CanPerformMissionAction() const;
+	FText GetAccessWarning() const;
 
 	UFUNCTION(BlueprintPure, Category="Combat")
 	int32 GetAmmoInMagazine() const { return AmmoInMagazine; }

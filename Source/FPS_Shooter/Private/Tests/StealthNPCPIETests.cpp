@@ -235,7 +235,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStealthNPCPIETest, "FPS_Shooter.NPC.SearchNavi
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FStealthNPCPIETest::RunTest(const FString& Parameters)
 {
-	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Maps/ThirdPersonMap"), true))
+	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true))
 	{
 		AddError(TEXT("Failed to load mission map for NPC PIE"));
 		return false;

@@ -71,6 +71,9 @@ public:
 				Player->SetActorLocation(It->GetActorLocation());
 				Mission->Tick(0.01f);
 				Mission->CollectObjective(Player);
+				Mission->UploadData(Player);
+				Mission->CollectKeycard(Player);
+				Mission->VerifyArchive(Player);
 				It->Tick(0.01f);
 				break;
 			}
@@ -214,7 +217,7 @@ bool FStealthHUDViewportTest::RunTest(const FString& Parameters)
 		AddInfo(TEXT("HUD screenshot test requires a rendered PIE viewport"));
 		return true;
 	}
-	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Maps/ThirdPersonMap"), true)) { return false; }
+	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true)) { return false; }
 	ADD_LATENT_AUTOMATION_COMMAND(FStealthHUDViewportCheck(*this));
 	return true;
 }

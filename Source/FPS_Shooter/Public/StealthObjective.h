@@ -10,17 +10,15 @@ class USphereComponent;
 class UStaticMeshComponent;
 class USoundRayInteractionComponent;
 
-UCLASS()
-class FPS_SHOOTER_API AStealthObjective : public AActor, public IStealthInteractable
+UCLASS(Abstract)
+class FPS_SHOOTER_API AStealthMissionTerminal : public AActor, public IStealthInteractable
 {
 	GENERATED_BODY()
 
 public:
-	AStealthObjective();
-	virtual void Interact_Implementation(AStealthCharacter* InteractingCharacter) override;
-	virtual FText GetInteractionPrompt_Implementation() const override;
+	AStealthMissionTerminal();
 
-private:
+protected:
 	UPROPERTY(VisibleAnywhere, Category="Components")
 	TObjectPtr<USoundRayInteractionComponent> SoundEmitter;
 	UPROPERTY(VisibleAnywhere, Category="Components")
@@ -31,4 +29,27 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category="Components")
 	TObjectPtr<UPointLightComponent> LightComponent;
+};
+
+UCLASS()
+class FPS_SHOOTER_API AStealthObjective : public AStealthMissionTerminal
+{
+	GENERATED_BODY()
+
+public:
+	virtual void Interact_Implementation(AStealthCharacter* InteractingCharacter) override;
+	virtual FText GetInteractionPrompt_Implementation() const override;
+};
+
+UCLASS()
+class FPS_SHOOTER_API AStealthOperationsTerminal : public AStealthMissionTerminal
+{
+	GENERATED_BODY()
+
+public:
+	virtual void Interact_Implementation(AStealthCharacter* InteractingCharacter) override;
+	virtual FText GetInteractionPrompt_Implementation() const override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mission")
+	bool bVerifiesArchive = false;
 };

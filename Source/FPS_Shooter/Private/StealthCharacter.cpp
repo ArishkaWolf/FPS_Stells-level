@@ -12,6 +12,7 @@
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
+#include "EngineUtils.h"
 #include "FallingSoundSphere.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -23,6 +24,7 @@
 #include "Particles/ParticleSystem.h"
 #include "SoundRayEmitterComponent.h"
 #include "StealthGameMode.h"
+#include "StealthDoor.h"
 #include "StealthArmsAnimInstance.h"
 #include "StealthInteractable.h"
 #include "StealthSupplyPickup.h"
@@ -382,9 +384,20 @@ void AStealthCharacter::Interact()
 	}
 	if (AActor* Target = FindInteractionTarget())
 	{
+		if (const AStealthDoor* Door = Cast<AStealthDoor>(Target); Door && Door->IsAccessDenied()) { return; }
 		if (!Target->IsA<AStealthSupplyPickup>()) { CancelReload(); }
 		IStealthInteractable::Execute_Interact(Target, this);
 	}
+}
+
+FText AStealthCharacter::GetAccessWarning() const
+{
+	if (!CanPerformMissionAction()) { return FText::GetEmpty(); }
+	for (TActorIterator<AStealthDoor> It(GetWorld()); It; ++It)
+	{
+		if (It->ShowsAccessWarningTo(*this)) { return AStealthDoor::AccessDeniedText(); }
+	}
+	return FText::GetEmpty();
 }
 
 FText AStealthCharacter::GetInteractionPrompt() const

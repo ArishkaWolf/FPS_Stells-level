@@ -17,6 +17,7 @@
 #include "Sound/SoundBase.h"
 #include "StealthAIController.h"
 #include "StealthGameMode.h"
+#include "StealthKeycard.h"
 #include "StealthNPCAnimInstance.h"
 #include "SoundRayEmitterComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -208,6 +209,18 @@ void ASoundHearingNPC::Die()
 	}
 	// Leave the final death pose visible; the corpse never blocks navigation or extraction.
 	SetActorEnableCollision(false);
+	if (bCarriesKeycard)
+	{
+		const FVector Ground = GetActorLocation() - FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+		FHitResult Floor;
+		const FCollisionQueryParams Query(SCENE_QUERY_STAT(KeycardFloor), false, this);
+		const bool bFoundFloor = GetWorld()->LineTraceSingleByChannel(Floor, Ground + FVector(0, 0, 30),
+			Ground - FVector(0, 0, 450), ECC_WorldStatic, Query);
+		const FVector Drop = (bFoundFloor ? Floor.ImpactPoint : Ground) + FVector(0, 0, 10);
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		GetWorld()->SpawnActor<AStealthKeycard>(Drop, GetActorRotation(), Params);
+	}
 	SetLifeSpan(35.0f);
 }
 

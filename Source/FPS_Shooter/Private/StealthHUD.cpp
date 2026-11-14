@@ -12,9 +12,11 @@
 #include "SoundHearingNPC.h"
 #include "StealthAIController.h"
 #include "StealthCharacter.h"
+#include "StealthDoor.h"
 #include "StealthExitZone.h"
 #include "StealthGameMode.h"
 #include "StealthObjective.h"
+#include "StealthKeycard.h"
 #include "StealthPlayerController.h"
 #include "StealthSupplyPickup.h"
 #include "UObject/ConstructorHelpers.h"
@@ -157,8 +159,8 @@ const TCHAR* StageCaption(EStealthMissionStage Stage)
 
 AStealthHUD::AStealthHUD()
 {
-	static ConstructorHelpers::FObjectFinder<UTexture2D> Aerial(TEXT("/Game/Interface/T_SiteAerial.T_SiteAerial"));
-	TacticalAerial = Aerial.Object;
+	static ConstructorHelpers::FObjectFinder<UTexture2D> FloorPlan(TEXT("/Game/Laboratory/Textures/T_FloorPlan.T_FloorPlan"));
+	LaboratoryFloorPlan = FloorPlan.Object;
 }
 
 void AStealthHUD::DrawHUD()
@@ -199,10 +201,13 @@ void AStealthHUD::DrawHUD()
 		const FLinearColor StageColor = Stage == EStealthMissionStage::Evade ? Red : Mint;
 		const FVector2D Objective(Margin, Margin);
 		const FString Task = Mission->GetObjectiveText();
-		const float Width = FMath::Max(163.0, UI.Measure(Task, 0.94f).X + 28.0);
+		const FString Caption = Mission->HasExtendedObjectives()
+			? FString::Printf(TEXT("ЭТАП %d/5  •  %s"), 1 + int32(Mission->GetMissionStep()), StageCaption(Stage))
+			: StageCaption(Stage);
+		const float Width = FMath::Max3(163.0, UI.Measure(Task, 0.94f).X + 28.0, UI.Measure(Caption, 0.76f, Bold).X + 28.0);
 		UI.Box(Backdrop, Objective, FVector2D(Width, 58));
 		UI.Box(StageColor, Objective, FVector2D(2, 37));
-		UI.Text(StageCaption(Stage), Objective + FVector2D(10, 4), StageColor, 0.76f, Bold);
+		UI.Text(Caption, Objective + FVector2D(10, 4), StageColor, 0.76f, Bold);
 		UI.Text(Task, Objective + FVector2D(10, 19), Ink, 0.94f);
 		UI.Text(TEXT("[M] Карта"), Objective + FVector2D(10, 38), Muted, 0.76f);
 
@@ -217,7 +222,10 @@ void AStealthHUD::DrawHUD()
 
 	if (!Character) { return; }
 
-	const FString Prompt = Character->GetInteractionPrompt().ToString();
+	const FString AccessWarning = Character->GetAccessWarning().ToString();
+	const FString Interaction = Character->GetInteractionPrompt().ToString();
+	const bool bAccessDenied = !AccessWarning.IsEmpty() || Interaction == AStealthDoor::AccessDeniedText().ToString();
+	const FString Prompt = AccessWarning.IsEmpty() ? Interaction : AccessWarning;
 	const FLinearColor Dot = Prompt.IsEmpty()
 		? FLinearColor(1.0f, 1.0f, 1.0f, FMath::Lerp(1.0f, 0.55f, Character->GetAimAlpha())) : Mint;
 	UI.Box(FLinearColor(0, 0, 0, 0.8f), Center - FVector2D(3, 3), FVector2D(6, 6));
@@ -235,8 +243,8 @@ void AStealthHUD::DrawHUD()
 		const float PromptWidth = FMath::Min<float>(UI.Size.X - 2 * Margin, UI.Measure(Prompt, 1.0f).X + 74.0f);
 		const FVector2D At(Center.X - PromptWidth * 0.5f, Center.Y + 23);
 		UI.Box(Panel, At, FVector2D(PromptWidth, 34));
-		UI.Box(Mint, At + FVector2D(5, 5), FVector2D(43, 24));
-		UI.Center(TEXT("E / A"), At + FVector2D(26.5, 17), Panel, 0.8f);
+		UI.Box(bAccessDenied ? Red : Mint, At + FVector2D(5, 5), FVector2D(43, 24));
+		UI.Center(bAccessDenied ? TEXT("!") : TEXT("E / A"), At + FVector2D(26.5, 17), Panel, 0.8f);
 		const float TextScale = FMath::Min(1.0f, (PromptWidth - 65.0f) / FMath::Max(1.0, UI.Measure(Prompt, 1.0f).X));
 		UI.Text(Prompt, At + FVector2D(57, 17 - UI.Measure(Prompt, TextScale).Y * 0.5), Ink, TextScale);
 	}
@@ -277,12 +285,12 @@ void AStealthHUD::DrawHUD()
 
 void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealthCharacter& Character)
 {
+	const bool bUseFloorPlan = LaboratoryFloorPlan && GetWorld()->GetMapName().EndsWith(TEXT("ResearchFacility"));
 	if (!MapBounds.bIsValid)
 	{
-		// Match the orthographic capture of ThirdPersonMap in world centimeters.
-		if (TacticalAerial && GetWorld()->GetMapName().EndsWith(TEXT("ThirdPersonMap")))
+		if (bUseFloorPlan)
 		{
-			MapBounds = FBox2D(FVector2D(-40, -28), FVector2D(12040, 8428));
+			MapBounds = FBox2D(FVector2D(-100, -100), FVector2D(6300, 3500));
 		}
 		else
 		{
@@ -327,11 +335,10 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 	{
 		return TopLeft + FVector2D(Position.X - MapBounds.Min.X, MapBounds.Max.Y - Position.Y) * Fit;
 	};
-	if (TacticalAerial && MapObstacles.IsEmpty())
+	if (bUseFloorPlan)
 	{
-		DrawTextureSimple(TacticalAerial, TopLeft.X * UI.Scale, TopLeft.Y * UI.Scale,
-			Extent.X * Fit * UI.Scale / TacticalAerial->GetSizeX(), false);
-		UI.Box(FLinearColor(0.008f, 0.016f, 0.020f, 0.19f), TopLeft, Extent * Fit);
+		DrawTextureSimple(LaboratoryFloorPlan, TopLeft.X * UI.Scale, TopLeft.Y * UI.Scale,
+			Extent.X * Fit * UI.Scale / LaboratoryFloorPlan->GetSizeX(), false);
 	}
 	for (const FBox2D& Obstacle : MapObstacles)
 	{
@@ -340,10 +347,10 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 		UI.Box(FLinearColor(0.27f, 0.34f, 0.39f), Position, FVector2D(FMath::Max(1.0, Size.X), FMath::Max(1.0, Size.Y)));
 	}
 
-	const bool bHasIntel = Mission.HasObjective();
+	const EStealthMissionStep MissionStep = Mission.GetMissionStep();
+	const bool bCanExtract = Mission.CanExtract();
 	const bool bPursued = Mission.GetMissionStage() == EStealthMissionStage::Evade;
-	const FLinearColor ExitColor = bHasIntel ? (bPursued ? Amber : Mint) : Muted;
-	const FLinearColor IntelColor = bHasIntel ? Muted : Amber;
+	const FLinearColor ExitColor = bCanExtract ? (bPursued ? Amber : Mint) : Muted;
 	const FLinearColor PlayerColor(0.48f, 0.81f, 1.0f);
 	const FVector2D PlayerPin = ProjectMap(FVector2D(Character.GetActorLocation()));
 	const float ViewYaw = Character.GetViewRotation().Yaw;
@@ -362,11 +369,6 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 		};
 		UI.Triangle(PlayerPin, Edge(Step), Edge(Step + 1), Sector);
 	}
-	if (MapObstacles.IsEmpty())
-	{
-		UI.Center(TEXT("СЕВЕРНЫЙ ОБХОД"), ProjectMap(FVector2D(5600, 8100)), Ink, 0.79f, Bold);
-		UI.Center(TEXT("КОНТЕЙНЕРНЫЙ ДВОР"), ProjectMap(FVector2D(6240, 600)), Ink, 0.79f, Bold);
-	}
 	TOptional<FVector> Destination;
 	for (TActorIterator<AStealthSupplyPickup> It(GetWorld()); It; ++It)
 	{
@@ -375,17 +377,46 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 		UI.Box(Panel, Pin - FVector2D(8, 8), FVector2D(16, 16));
 		DrawSupplyIcon(UI, Pin, bMedkit, bMedkit ? AidColor : Amber);
 	}
-	for (TActorIterator<AStealthObjective> It(GetWorld()); It && !bHasIntel; ++It)
+	const auto MarkObjective = [&](const AActor& Target, const TCHAR* Label)
 	{
-		Destination = It->GetActorLocation();
-		const FVector2D Pin = ProjectMap(FVector2D(It->GetActorLocation()));
+		Destination = Target.GetActorLocation();
+		const FVector2D Pin = ProjectMap(FVector2D(Destination.GetValue()));
 		UI.Box(Panel, Pin - FVector2D(7, 7), FVector2D(14, 14));
-		UI.Box(IntelColor, Pin - FVector2D(4, 4), FVector2D(8, 8));
-		UI.Right(TEXT("Данные"), Pin - FVector2D(11, 7), IntelColor, 0.86f);
+		UI.Box(Amber, Pin - FVector2D(4, 4), FVector2D(8, 8));
+		UI.Right(Label, Pin - FVector2D(11, 7), Amber, 0.86f);
+	};
+	switch (MissionStep)
+	{
+	case EStealthMissionStep::RetrieveData:
+		for (TActorIterator<AStealthObjective> It(GetWorld()); It; ++It) { MarkObjective(**It, TEXT("Данные")); break; }
+		break;
+	case EStealthMissionStep::UploadData:
+	case EStealthMissionStep::VerifyArchive:
+		for (TActorIterator<AStealthOperationsTerminal> It(GetWorld()); It; ++It)
+		{
+			if (It->bVerifiesArchive == (MissionStep == EStealthMissionStep::VerifyArchive))
+			{
+				MarkObjective(**It, It->bVerifiesArchive ? TEXT("Сверка архива") : TEXT("Загрузка"));
+				break;
+			}
+		}
+		break;
+	case EStealthMissionStep::RecoverKeycard:
+		for (TActorIterator<AStealthKeycard> It(GetWorld()); It; ++It) { MarkObjective(**It, TEXT("Пропуск")); break; }
+		if (!Destination)
+		{
+			for (TActorIterator<ASoundHearingNPC> It(GetWorld()); It; ++It)
+			{
+				if (It->bCarriesKeycard && !It->IsDead()) { MarkObjective(**It, TEXT("Охранник архива")); break; }
+			}
+		}
+		break;
+	case EStealthMissionStep::Extract:
+		break;
 	}
 	for (TActorIterator<AStealthExitZone> It(GetWorld()); It; ++It)
 	{
-		if (bHasIntel) { Destination = It->GetActorLocation(); }
+		if (bCanExtract) { Destination = It->GetActorLocation(); }
 		const FVector2D Pin = ProjectMap(FVector2D(It->GetActorLocation()));
 		UI.Box(ExitColor, Pin - FVector2D(8, 8), FVector2D(16, 16));
 		UI.Box(Panel, Pin - FVector2D(5, 5), FVector2D(10, 10));
@@ -418,16 +449,17 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 	const int32 Heading = FMath::RoundToInt(ViewYaw / 45.0f);
 	UI.Text(FString::Printf(TEXT("Вы смотрите на %s"), Headings[(Heading % 8 + 8) % 8]),
 		Legend + FVector2D(0, 31), PlayerColor);
-	UI.Text(bHasIntel ? TEXT("Данные получены") : TEXT("Заберите данные"), Legend + FVector2D(0, 65), IntelColor);
+	UI.Text(Mission.HasKeycard() ? TEXT("Пропуск получен") : TEXT("Цель миссии"), Legend + FVector2D(0, 65), Amber);
 	UI.Text(TEXT("Точка эвакуации"), Legend + FVector2D(0, 99), ExitColor);
-	const TCHAR* ExitStatus = !bHasIntel ? TEXT("Откроется после сбора данных")
+	const TCHAR* ExitStatus = !bCanExtract ? TEXT("Откроется после выполнения задач")
 		: bPursued ? TEXT("Оторвитесь от охраны") : TEXT("Доступна");
-	UI.Text(ExitStatus, Legend + FVector2D(0, 122), Muted, 0.82f);
+	const float StatusScale = FMath::Min(.82f, 183.0f / FMath::Max(1.0, UI.Measure(ExitStatus, 1.0f).X));
+	UI.Text(ExitStatus, Legend + FVector2D(0, 122), Muted, StatusScale);
 	UI.Box(Track, Legend + FVector2D(0, 162), FVector2D(194, 1));
 	UI.Text(TEXT("ТЕКУЩАЯ ЦЕЛЬ"), Legend + FVector2D(0, 180), Muted, 0.82f, Bold);
-	const TCHAR* Active = bPursued ? TEXT("Оторвитесь от охраны")
-		: bHasIntel ? TEXT("Идите к эвакуации") : TEXT("Идите к данным");
-	UI.Text(Active, Legend + FVector2D(0, 205), Mint);
+	const FString Active = Mission.GetObjectiveText();
+	const float TaskScale = FMath::Min(.94f, 183.0f / FMath::Max(1.0f, UI.Measure(Active, 1.0f).X));
+	UI.Text(Active, Legend + FVector2D(0, 205), Mint, TaskScale);
 	if (Destination)
 	{
 		UI.Text(FString::Printf(TEXT("%d м по прямой"), FMath::RoundToInt(

@@ -27,5 +27,5 @@ private:
 	FBox2D MapBounds{ForceInit};
 
 	UPROPERTY()
-	TObjectPtr<UTexture2D> TacticalAerial;
+	TObjectPtr<UTexture2D> LaboratoryFloorPlan;
 };

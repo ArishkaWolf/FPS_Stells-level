@@ -21,6 +21,16 @@ enum class EStealthMissionStage : uint8
 	Extraction
 };
 
+UENUM(BlueprintType)
+enum class EStealthMissionStep : uint8
+{
+	RetrieveData,
+	UploadData,
+	RecoverKeycard,
+	VerifyArchive,
+	Extract
+};
+
 UCLASS()
 class FPS_SHOOTER_API AStealthGameMode : public AGameModeBase
 {
@@ -63,9 +73,21 @@ public:
 	UFUNCTION(BlueprintPure, Category="Mission")
 	bool HasObjective() const { return bObjectiveCollected; }
 
+	EStealthMissionStep GetMissionStep() const;
+	bool HasExtendedObjectives() const { return bExtendedObjectives; }
+	bool HasUploadedData() const { return bDataUploaded; }
+	bool HasKeycard() const { return bKeycardCollected; }
+	bool CanExtract() const;
+	bool UploadData(AActor* Operator);
+	bool CollectKeycard(AActor* Collector);
+	bool VerifyArchive(AActor* Operator);
+
 	UFUNCTION(BlueprintPure, Category="Mission")
 	EStealthMissionState GetMissionState() const { return MissionState; }
 	bool IsMissionResultReady() const { return bMissionResultReady; }
+
+protected:
+	bool bExtendedObjectives = false;
 
 private:
 	UPROPERTY(EditDefaultsOnly, Category="Mission", meta=(ClampMin="100.0"))
@@ -83,8 +105,21 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category="Mission")
 	bool bObjectiveCollected = false;
+	bool bDataUploaded = false;
+	bool bKeycardCollected = false;
+	bool bArchiveVerified = false;
+	bool CanAdvanceObjectives(const AActor* Actor) const;
 
 	bool IsMissionPlayer(const AActor* Actor) const;
 	void FinishMission(EStealthMissionState NewState);
 	void ShowMissionResult();
+};
+
+UCLASS()
+class FPS_SHOOTER_API AStealthLaboratoryGameMode : public AStealthGameMode
+{
+	GENERATED_BODY()
+
+public:
+	AStealthLaboratoryGameMode();
 };

@@ -166,7 +166,7 @@ public:
 			Test->TestEqual(TEXT("Cancelled reload grants no rounds"), Player->GetAmmoInMagazine(), 29);
 			for (TActorIterator<AStealthObjective> It(World); It; ++It)
 			{
-				Player->SetActorLocation(It->GetActorLocation() - FVector(180, 0, 64));
+				Player->SetActorLocation(It->GetActorLocation() - It->GetActorForwardVector() * 180.0 + FVector(0, 0, -2));
 				PC->SetControlRotation((It->GetActorLocation() - Camera->GetComponentLocation()).Rotation());
 				break;
 			}
@@ -198,7 +198,7 @@ public:
 			SoftLanding = Player->GetLastLandingStrength();
 			Test->TestTrue(TEXT("A fall generates a landing impact"), SoftLanding > 0.0f);
 			Test->TestEqual(TEXT("Physical fall emits Landing event"), Player->GetSoundEmitter()->GetLastEmittedEvent().Type, ESoundEventType::Landing);
-			Player->SetActorLocation(MovementClearing + FVector(0, 0, 1100));
+			Player->SetActorLocation(MovementClearing + FVector(0, 0, 200));
 			Player->GetCharacterMovement()->Velocity = FVector::ZeroVector;
 			Player->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
 			Delay = 1.8f;
@@ -241,7 +241,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStealthCharacterPIETest, "FPS_Shooter.Characte
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FStealthCharacterPIETest::RunTest(const FString& Parameters)
 {
-	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Maps/ThirdPersonMap"), true))
+	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true))
 	{
 		AddError(TEXT("Cannot start character controls test in PIE"));
 		return false;

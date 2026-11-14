@@ -290,6 +290,9 @@ public:
 		Test->TestEqual(TEXT("Reload restores reserve ammo"), Player->GetReserveAmmo(), 90);
 		Test->TestEqual(TEXT("Reload restores distractions"), Player->GetNoiseMakerCount(), 3);
 		Test->TestFalse(TEXT("Reload resets intel"), Mission->HasObjective());
+		Test->TestFalse(TEXT("Reload clears the keycard"), Mission->HasKeycard());
+		Test->TestFalse(TEXT("Reload clears upload progress"), Mission->HasUploadedData());
+		Test->TestEqual(TEXT("Reload resets the five-stage mission"), Mission->GetMissionStep(), EStealthMissionStep::RetrieveData);
 		Test->TestTrue(TEXT("Reload restores safe start"), Mission->IsActorProtected(Player));
 		Test->TestFalse(TEXT("Reload clears pursuit"), Mission->IsPlayerPursued());
 		Test->TestFalse(TEXT("Reload resumes gameplay"), UGameplayStatics::IsGamePaused(World));
@@ -336,7 +339,7 @@ public:
 		}
 		else if (Stage == 1)
 		{
-			Player->SetActorLocation(Objective->GetActorLocation() - FVector(150, 0, 70));
+			Player->SetActorLocation(Objective->GetActorLocation() - Objective->GetActorForwardVector() * 150.0 + FVector(0, 0, -2));
 			Mission->Tick(0.1f);
 			const auto PressAndRelease = [PC](FKey Key)
 			{
@@ -363,6 +366,10 @@ public:
 			PC->PlayerTick(0.016f);
 			Objective->Interact_Implementation(Player);
 			Test->TestTrue(TEXT("Actual map intel collected"), Mission->HasObjective());
+			Test->TestFalse(TEXT("Data alone does not unlock extraction"), Mission->CanExtract());
+			Test->TestTrue(TEXT("Dispatcher upload advances the mission"), Mission->UploadData(Player));
+			Test->TestTrue(TEXT("Keycard is collected"), Mission->CollectKeycard(Player));
+			Test->TestTrue(TEXT("Archive verification unlocks extraction"), Mission->VerifyArchive(Player));
 			Player->SetActorLocation(Exit->GetActorLocation());
 			Player->UpdateOverlaps();
 			Exit->Tick(0.1f);
@@ -391,7 +398,7 @@ private:
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStealthLevelLifecycleTest, "FPS_Shooter.Mission.LevelLifecycle", TestFlags)
 bool FStealthLevelLifecycleTest::RunTest(const FString& Parameters)
 {
-	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Maps/ThirdPersonMap"), true))
+	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true))
 	{
 		AddError(TEXT("Failed to load stealth map for PIE testing."));
 		return false;

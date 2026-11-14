@@ -25,7 +25,7 @@ void AStealthExitZone::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	const AStealthGameMode* GameMode = Cast<AStealthGameMode>(UGameplayStatics::GetGameMode(this));
-	const bool bUnlocked = GameMode && GameMode->HasObjective();
+	const bool bUnlocked = GameMode && GameMode->CanExtract();
 	const bool bPursued = GameMode && GameMode->IsPlayerPursued();
 	const FColor ExitColor = !bUnlocked ? FColor::Red : bPursued ? FColor::Yellow : FColor::Green;
 	LightComponent->SetLightColor(FLinearColor(ExitColor));

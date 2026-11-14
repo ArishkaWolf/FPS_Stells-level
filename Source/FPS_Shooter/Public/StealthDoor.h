@@ -21,6 +21,11 @@ public:
 	bool SetOpen(bool bOpen, AActor* Initiator);
 	UFUNCTION(BlueprintPure, Category="Door")
 	bool IsOpen() const { return bIsOpen; }
+	bool IsAccessDenied() const;
+	bool ShowsAccessWarningTo(const AStealthCharacter& Character) const;
+	static FText AccessDeniedText();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Door")
+	bool bRequiresKeycard = false;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UStaticMeshComponent> DoorMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")

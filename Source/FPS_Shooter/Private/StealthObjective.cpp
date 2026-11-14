@@ -11,7 +11,7 @@
 #include "SoundRayInteractionComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
-AStealthObjective::AStealthObjective()
+AStealthMissionTerminal::AStealthMissionTerminal()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	SoundEmitter = CreateDefaultSubobject<USoundRayInteractionComponent>(TEXT("SoundEmitter"));
@@ -95,4 +95,33 @@ void AStealthObjective::Interact_Implementation(AStealthCharacter* InteractingCh
 FText AStealthObjective::GetInteractionPrompt_Implementation() const
 {
 	return NSLOCTEXT("StealthUI", "CollectIntel", "Забрать данные");
+}
+
+void AStealthOperationsTerminal::Interact_Implementation(AStealthCharacter* InteractingCharacter)
+{
+	AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>();
+	if (Mission && (bVerifiesArchive ? Mission->VerifyArchive(InteractingCharacter) : Mission->UploadData(InteractingCharacter)))
+	{
+		SoundEmitter->NotifyInteraction(InteractingCharacter);
+		LightComponent->SetLightColor(FLinearColor(.24f, 1.0f, .34f));
+	}
+}
+
+FText AStealthOperationsTerminal::GetInteractionPrompt_Implementation() const
+{
+	const AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>();
+	if (!Mission || !Mission->HasExtendedObjectives()) { return FText::GetEmpty(); }
+	if (bVerifiesArchive)
+	{
+		if (Mission->CanExtract()) { return NSLOCTEXT("StealthUI", "ArchiveVerified", "Архив проверен"); }
+		if (Mission->GetMissionStep() != EStealthMissionStep::VerifyArchive)
+		{
+			return NSLOCTEXT("StealthUI", "ArchiveNeedsUpload", "Для сверки нужны загруженные данные и пропуск");
+		}
+		return NSLOCTEXT("StealthUI", "VerifyArchive", "Сверить данные с резервным архивом");
+	}
+	if (Mission->HasUploadedData()) { return NSLOCTEXT("StealthUI", "DataUploaded", "Данные загружены"); }
+	return Mission->HasObjective()
+		? NSLOCTEXT("StealthUI", "UploadData", "Загрузить данные")
+		: NSLOCTEXT("StealthUI", "UploadNeedsData", "Сначала заберите данные в серверной");
 }

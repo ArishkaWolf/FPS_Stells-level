@@ -19,6 +19,11 @@ AStealthGameMode::AStealthGameMode()
 	PlayerControllerClass = AStealthPlayerController::StaticClass();
 }
 
+AStealthLaboratoryGameMode::AStealthLaboratoryGameMode()
+{
+	bExtendedObjectives = true;
+}
+
 void AStealthGameMode::StartPlay()
 {
 	// Initialize before Super starts AI and other actors.
@@ -105,7 +110,24 @@ EStealthMissionStage AStealthGameMode::GetMissionStage() const
 	{
 		return EStealthMissionStage::Evade;
 	}
-	return bObjectiveCollected ? EStealthMissionStage::Extraction : EStealthMissionStage::Infiltration;
+	return CanExtract() ? EStealthMissionStage::Extraction : EStealthMissionStage::Infiltration;
+}
+
+EStealthMissionStep AStealthGameMode::GetMissionStep() const
+{
+	if (!bObjectiveCollected) { return EStealthMissionStep::RetrieveData; }
+	if (bExtendedObjectives)
+	{
+		if (!bDataUploaded) { return EStealthMissionStep::UploadData; }
+		if (!bKeycardCollected) { return EStealthMissionStep::RecoverKeycard; }
+		if (!bArchiveVerified) { return EStealthMissionStep::VerifyArchive; }
+	}
+	return EStealthMissionStep::Extract;
+}
+
+bool AStealthGameMode::CanExtract() const
+{
+	return GetMissionStep() == EStealthMissionStep::Extract;
 }
 
 FString AStealthGameMode::GetObjectiveText() const
@@ -119,7 +141,18 @@ FString AStealthGameMode::GetObjectiveText() const
 	case EStealthMissionStage::Extraction:
 		return TEXT("Доберитесь до точки эвакуации");
 	default:
-		return TEXT("Проникните внутрь и заберите данные");
+		break;
+	}
+	switch (GetMissionStep())
+	{
+	case EStealthMissionStep::UploadData:
+		return TEXT("Загрузите данные в диспетчерской");
+	case EStealthMissionStep::RecoverKeycard:
+		return TEXT("Заберите пропуск у охранника архива");
+	case EStealthMissionStep::VerifyArchive:
+		return TEXT("Сверьте архив в закрытой аналитической");
+	default:
+		return TEXT("Заберите данные в серверной");
 	}
 }
 
@@ -148,8 +181,7 @@ FString AStealthGameMode::GetThreatText() const
 
 bool AStealthGameMode::CollectObjective(AActor* Collector)
 {
-	if (MissionState != EStealthMissionState::Playing || bObjectiveCollected || !IsMissionPlayer(Collector)
-		|| IsActorProtected(Collector))
+	if (bObjectiveCollected || !CanAdvanceObjectives(Collector))
 	{
 		return false;
 	}
@@ -159,9 +191,44 @@ bool AStealthGameMode::CollectObjective(AActor* Collector)
 	return true;
 }
 
+bool AStealthGameMode::CanAdvanceObjectives(const AActor* Actor) const
+{
+	return MissionState == EStealthMissionState::Playing && IsMissionPlayer(Actor) && !IsActorProtected(Actor);
+}
+
+bool AStealthGameMode::UploadData(AActor* Operator)
+{
+	if (!bExtendedObjectives || GetMissionStep() != EStealthMissionStep::UploadData || !CanAdvanceObjectives(Operator))
+	{
+		return false;
+	}
+	bDataUploaded = true;
+	return true;
+}
+
+bool AStealthGameMode::CollectKeycard(AActor* Collector)
+{
+	if (!bExtendedObjectives || bKeycardCollected || !CanAdvanceObjectives(Collector))
+	{
+		return false;
+	}
+	bKeycardCollected = true;
+	return true;
+}
+
+bool AStealthGameMode::VerifyArchive(AActor* Operator)
+{
+	if (!bExtendedObjectives || GetMissionStep() != EStealthMissionStep::VerifyArchive || !CanAdvanceObjectives(Operator))
+	{
+		return false;
+	}
+	bArchiveVerified = true;
+	return true;
+}
+
 bool AStealthGameMode::TryCompleteMission(AActor* ExitingActor)
 {
-	if (MissionState != EStealthMissionState::Playing || !bObjectiveCollected || !IsMissionPlayer(ExitingActor)
+	if (MissionState != EStealthMissionState::Playing || !CanExtract() || !IsMissionPlayer(ExitingActor)
 		|| IsPlayerPursued())
 	{
 		return false;
