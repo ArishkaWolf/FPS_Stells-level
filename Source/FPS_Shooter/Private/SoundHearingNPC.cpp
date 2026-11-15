@@ -80,8 +80,7 @@ ASoundHearingNPC::ASoundHearingNPC()
 	SoundEmitter->bFootstepsEmitSoundRays = false;
 	SoundEmitter->MinSpeedForFootsteps = 35.0f;
 	SoundEmitter->FootstepPlaybackVolume = 0.75f;
-	static ConstructorHelpers::FObjectFinder<USoundBase> ConcreteStep(TEXT("/Game/Audio/Stealth/ConcreteStep.ConcreteStep"));
-	SoundEmitter->FootstepSound = ConcreteStep.Object;
+	SoundEmitter->SetLaboratoryFootstepDefaults();
 	auto* StepAttenuation = CreateDefaultSubobject<USoundAttenuation>(TEXT("FootstepAttenuation"));
 	StepAttenuation->Attenuation.AttenuationShapeExtents = FVector(175, 0, 0);
 	StepAttenuation->Attenuation.FalloffDistance = 1350.0f;

@@ -39,4 +39,5 @@ private:
 	FTransform ClosedLeaf;
 	bool bIsOpen = false;
 	float OpenAlpha = 0.0f;
+	float SwingAngle = 0.0f;
 };

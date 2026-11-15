@@ -105,15 +105,15 @@ AStealthCharacter::AStealthCharacter()
 	SoundEmitter = CreateDefaultSubobject<USoundRayEmitterComponent>(TEXT("SoundEmitter"));
 	SoundEmitter->Volume = WalkFootstepVolume;
 	SoundEmitter->RayCount = 16;
-	SoundEmitter->AttenuationPerMeter = 0.08f;
+	SoundEmitter->RayPitchDegrees = -4.0f;
+	SoundEmitter->AttenuationPerMeter = 0.06f;
 	SoundEmitter->WallAbsorption = 0.65f;
 	SoundEmitter->MaxDistance = WalkFootstepDistance;
 	SoundEmitter->MaxReflections = 2;
 	SoundEmitter->FootstepInterval = 0.48f;
 	SoundEmitter->MinSpeedForFootsteps = 25.0f;
 	SoundEmitter->bDrawDebug = false;
-	static ConstructorHelpers::FObjectFinder<USoundBase> ConcreteStep(TEXT("/Game/Audio/Stealth/ConcreteStep.ConcreteStep"));
-	SoundEmitter->FootstepSound = ConcreteStep.Object;
+	SoundEmitter->SetLaboratoryFootstepDefaults();
 
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> MannyMesh(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny.SKM_Manny"));
 	if (MannyMesh.Succeeded())

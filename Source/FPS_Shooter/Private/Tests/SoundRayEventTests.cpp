@@ -274,7 +274,8 @@ bool FSoundGameplaySourcesTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Repeated open is not a second action"), Door->SetOpen(true, Scene.Player));
 	TestTrue(TEXT("Repeated state does not duplicate sound"), Door->SoundEmitter->GetLastEmittedEvent().EventId == OpeningId);
 	Door->Tick(0.7f);
-	TestTrue(TEXT("Door leaf animates to open angle"), FMath::IsNearlyEqual(Door->DoorMesh->GetRelativeRotation().Yaw, Door->OpenAngle));
+	TestTrue(TEXT("Door leaf animates to the full swing angle"),
+		FMath::IsNearlyEqual(FMath::Abs(Door->DoorMesh->GetRelativeRotation().Yaw), FMath::Abs(Door->OpenAngle)));
 	TestFalse(TEXT("Open door clears the passage trace"), Scene.World->LineTraceSingleByChannel(DoorHit,
 		FVector(1400, 50, 100), FVector(1600, 50, 100), ECC_Visibility));
 	IStealthInteractable::Execute_Interact(Door, Scene.Player);

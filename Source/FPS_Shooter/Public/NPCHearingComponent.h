@@ -67,7 +67,7 @@ public:
 	UFUNCTION(BlueprintPure, Category="Hearing")
 	bool HasHeardSound() const { return CurrentSoundStrength > KINDA_SMALL_NUMBER; }
 
-	bool GetBestSound(FNPCHearingStimulus& OutSound) const;
+	bool GetBestSound(FNPCHearingStimulus& OutSound, int32 AfterId = 0, float MaxAge = BIG_NUMBER) const;
 	int32 GetRememberedSoundCount() const { return SoundMemory.Num(); }
 	float GetSoundPriority(const FNPCHearingStimulus& Sound) const;
 	void ClearSoundMemory();

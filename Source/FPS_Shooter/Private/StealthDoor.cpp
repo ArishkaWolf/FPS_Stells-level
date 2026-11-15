@@ -18,6 +18,7 @@ AStealthDoor::AStealthDoor()
 	DoorMesh->SetRelativeLocation(FVector(0, 50, 100));
 	DoorMesh->SetRelativeScale3D(FVector(0.16f, 1.0f, 2.0f));
 	DoorMesh->SetCollisionProfileName(TEXT("BlockAll"));
+	DoorMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube"));
 	DoorMesh->SetStaticMesh(Cube.Object);
 	SoundEmitter = CreateDefaultSubobject<USoundRayInteractionComponent>(TEXT("SoundEmitter"));
@@ -28,6 +29,7 @@ void AStealthDoor::BeginPlay()
 {
 	Super::BeginPlay();
 	ClosedLeaf = DoorMesh->GetRelativeTransform();
+	SwingAngle = OpenAngle;
 }
 
 void AStealthDoor::Interact_Implementation(AStealthCharacter* InteractingCharacter)
@@ -79,6 +81,13 @@ bool AStealthDoor::SetOpen(bool bOpen, AActor* Initiator)
 	if (bIsOpen == bOpen || (bOpen && IsAccessDenied())) { return false; }
 	if (const AStealthGameMode* Mission = GetWorld() ? GetWorld()->GetAuthGameMode<AStealthGameMode>() : nullptr;
 		Mission && Mission->GetMissionState() != EStealthMissionState::Playing) { return false; }
+	if (bOpen && OpenAlpha <= KINDA_SMALL_NUMBER && IsValid(Initiator))
+	{
+		const FVector Leaf = ClosedLeaf.GetLocation();
+		const FVector Opener = GetActorTransform().InverseTransformPosition(Initiator->GetActorLocation());
+		const double Side = FVector::DotProduct(Opener - Leaf, FVector::CrossProduct(FVector::UpVector, Leaf.GetSafeNormal2D()));
+		SwingAngle = FMath::IsNearlyZero(Side) ? OpenAngle : FMath::Sign(-Side) * FMath::Abs(OpenAngle);
+	}
 	bIsOpen = bOpen;
 	SoundEmitter->NotifyDoor(bIsOpen, Initiator);
 	return true;
@@ -92,7 +101,7 @@ void AStealthDoor::Tick(float DeltaSeconds)
 	if (!FMath::IsNearlyEqual(Previous, OpenAlpha))
 	{
 		// Rotate the leaf around the hinge, not around its mesh center.
-		const FQuat Swing(FRotator(0, OpenAngle * FMath::SmoothStep(0.0f, 1.0f, OpenAlpha), 0));
+		const FQuat Swing(FRotator(0, SwingAngle * FMath::SmoothStep(0.0f, 1.0f, OpenAlpha), 0));
 		DoorMesh->SetRelativeLocationAndRotation(Swing.RotateVector(ClosedLeaf.GetLocation()), Swing * ClosedLeaf.GetRotation());
 	}
 }

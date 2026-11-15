@@ -59,6 +59,12 @@ public:
 	TObjectPtr<USoundBase> FootstepSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Footsteps")
+	TArray<TObjectPtr<USoundBase>> FootstepAlternates;
+
+	// Call from the owning actor's constructor to load the shared recordings.
+	void SetLaboratoryFootstepDefaults();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Footsteps")
 	TObjectPtr<USoundAttenuation> FootstepAttenuation;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Footsteps", meta=(ClampMin="0.0"))
@@ -90,6 +96,7 @@ protected:
 
 private:
 	float TimeUntilNextFootstep = 0.0f;
+	int32 LastFootstepIndex = INDEX_NONE;
 	UPROPERTY(Transient)
 	FSoundRayEvent LastEmittedEvent;
 

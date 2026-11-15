@@ -210,7 +210,7 @@ private:
 		{
 			for (const FActiveSound* Sound : Device->GetActiveSounds())
 			{
-				if (Sound->GetSound() && Sound->GetSound()->GetFName() == TEXT("ConcreteStep"))
+				if (Sound->GetSound() && Sound->GetSound()->GetName().StartsWith(TEXT("LaboratoryStep")))
 				{
 					*Kinds |= Sound->bLocationDefined ? uint8(2) : uint8(1);
 				}
@@ -395,11 +395,30 @@ private:
 			if (AController* AI = It->GetController()) { AI->SetActorTickEnabled(false); }
 		}
 		TArray<AStealthSupplyPickup*> Medkits, Ammo;
+		int32 ShelfMedkits = 0;
+		UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(&World);
+		if (!Test.TestNotNull(TEXT("Laboratory has a navigation mesh"), Nav)) { return false; }
 		for (TActorIterator<AStealthSupplyPickup> It(&World); It; ++It)
 		{
+			if (It->ActorHasTag(TEXT("Mission.ShelfMedkit")))
+			{
+				++ShelfMedkits;
+				const FVector Location = It->GetActorLocation();
+				Test.TestTrue(TEXT("Each extra medkit sits on its own shelf"), It->GetAttachParentActor() &&
+					It->GetKind() == EStealthSupplyKind::Medkit && FMath::IsNearlyEqual(Location.Z, 121.3, 1.0));
+				const FVector From = FVector(Location.X, Location.Y, 160) + It->GetActorForwardVector() * 122;
+				FNavLocation Approach;
+				Test.TestTrue(TEXT("The aisle in front of the shelf is walkable"),
+					Nav->ProjectPointToNavigation(From, Approach, FVector(55, 55, 170)));
+				FHitResult Hit;
+				Test.TestTrue(TEXT("The case on the shelf is reachable from the aisle"),
+					World.LineTraceSingleByChannel(Hit, From, Location, ECC_Visibility) && Hit.GetActor() == *It);
+				continue;
+			}
 			(It->GetKind() == EStealthSupplyKind::Medkit ? Medkits : Ammo).Add(*It);
 			Test.TestTrue(TEXT("Supply cases sit on tables"), FMath::IsNearlyEqual(It->GetActorLocation().Z, 101.8, 2.0));
 		}
+		Test.TestEqual(TEXT("Four extra medkits are stocked in different rooms"), ShelfMedkits, 4);
 		if (!Test.TestTrue(TEXT("Two placed medkits and two ammo cases load in PIE"), Medkits.Num() == 2 && Ammo.Num() == 2)) { return false; }
 		Medkits.Sort([](const AStealthSupplyPickup& A, const AStealthSupplyPickup& B) { return A.GetActorLocation().Y < B.GetActorLocation().Y; });
 		Ammo.Sort([](const AStealthSupplyPickup& A, const AStealthSupplyPickup& B) { return A.GetActorLocation().Y < B.GetActorLocation().Y; });
@@ -407,8 +426,6 @@ private:
 		MedkitTwo = Medkits[1];
 		FirstAmmo = Ammo[0];
 		SecondAmmo = Ammo[1];
-		UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(&World);
-		if (!Test.TestNotNull(TEXT("Laboratory has a navigation mesh"), Nav)) { return false; }
 		for (const AStealthSupplyPickup* Supply : { Medkits[0], Medkits[1], Ammo[0], Ammo[1] })
 		{
 			const FVector Location = Supply->GetActorLocation();

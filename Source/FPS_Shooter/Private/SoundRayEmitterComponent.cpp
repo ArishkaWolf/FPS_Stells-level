@@ -7,10 +7,22 @@
 #include "Kismet/GameplayStatics.h"
 #include "NPCHearingComponent.h"
 #include "Sound/SoundAttenuation.h"
+#include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 USoundRayEmitterComponent::USoundRayEmitterComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+}
+
+void USoundRayEmitterComponent::SetLaboratoryFootstepDefaults()
+{
+	static ConstructorHelpers::FObjectFinder<USoundBase> Step(TEXT("/Game/Audio/Stealth/LaboratoryStep.LaboratoryStep"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> StepTwo(TEXT("/Game/Audio/Stealth/LaboratoryStep_02.LaboratoryStep_02"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> StepThree(TEXT("/Game/Audio/Stealth/LaboratoryStep_03.LaboratoryStep_03"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> StepFour(TEXT("/Game/Audio/Stealth/LaboratoryStep_04.LaboratoryStep_04"));
+	FootstepSound = Step.Object;
+	FootstepAlternates = {StepTwo.Object, StepThree.Object, StepFour.Object};
 }
 
 void USoundRayEmitterComponent::BeginPlay()
@@ -63,16 +75,23 @@ void USoundRayEmitterComponent::EmitFootstepSound()
 	const APawn* Pawn = Cast<APawn>(GetOwner());
 	if (!Pawn || !FootstepSound || FootstepPlaybackVolume <= 0.0f) { return; }
 
-	const float Pitch = FMath::FRandRange(0.92f, 1.08f);
+	int32 Index = FMath::RandRange(0, FootstepAlternates.Num());
+	if (Index == LastFootstepIndex && !FootstepAlternates.IsEmpty())
+	{
+		Index = (Index + FMath::RandRange(1, FootstepAlternates.Num())) % (FootstepAlternates.Num() + 1);
+	}
+	LastFootstepIndex = Index;
+	USoundBase* Sound = Index > 0 && FootstepAlternates[Index - 1] ? FootstepAlternates[Index - 1].Get() : FootstepSound.Get();
+	const float Pitch = FMath::FRandRange(0.98f, 1.02f);
 	if (FootstepAttenuation)
 	{
 		const FVector Feet = Pawn->GetActorLocation() - FVector(0, 0, Pawn->GetSimpleCollisionHalfHeight() - 12.0f);
-		UGameplayStatics::PlaySoundAtLocation(this, FootstepSound, Feet, FRotator::ZeroRotator,
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, Feet, FRotator::ZeroRotator,
 			FootstepPlaybackVolume, Pitch, 0, FootstepAttenuation, nullptr, Pawn);
 	}
 	else if (Pawn->IsLocallyControlled())
 	{
-		UGameplayStatics::PlaySound2D(this, FootstepSound, FootstepPlaybackVolume, Pitch);
+		UGameplayStatics::PlaySound2D(this, Sound, FootstepPlaybackVolume, Pitch);
 	}
 }
 

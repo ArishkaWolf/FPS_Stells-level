@@ -9,7 +9,7 @@ UNPCHearingComponent::UNPCHearingComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 	bAutoActivate = true;
 	TypePriorityWeights = { { ESoundEventType::Footstep, 1.0f }, { ESoundEventType::Landing, 1.25f },
-		{ ESoundEventType::Gunshot, 2.5f }, { ESoundEventType::ThrownObject, 1.5f },
+		{ ESoundEventType::Gunshot, 3.0f }, { ESoundEventType::ThrownObject, 1.5f },
 		{ ESoundEventType::Door, 1.2f }, { ESoundEventType::Interaction, 0.8f } };
 }
 
@@ -143,12 +143,13 @@ float UNPCHearingComponent::GetSoundPriority(const FNPCHearingStimulus& Sound) c
 	return Sound.Strength * (TypeWeight ? FMath::Max(0.0f, *TypeWeight) : 1.0f) * Freshness / (1.0f + Distance / 1200.0f);
 }
 
-bool UNPCHearingComponent::GetBestSound(FNPCHearingStimulus& OutSound) const
+bool UNPCHearingComponent::GetBestSound(FNPCHearingStimulus& OutSound, int32 AfterId, float MaxAge) const
 {
 	float BestPriority = KINDA_SMALL_NUMBER;
 	bool bFound = false;
 	for (const FNPCHearingStimulus& Sound : SoundMemory)
 	{
+		if (Sound.Id <= AfterId || Sound.Age > MaxAge) { continue; }
 		const float Priority = GetSoundPriority(Sound);
 		if (Priority > BestPriority || (bFound && FMath::IsNearlyEqual(Priority, BestPriority) && Sound.Id > OutSound.Id))
 		{

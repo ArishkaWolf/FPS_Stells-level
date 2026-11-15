@@ -191,7 +191,7 @@ public:
 	}
 
 private:
-	bool Next(float Delay, const UWorld& World)
+	bool Next(double Delay, const UWorld& World)
 	{
 		++Stage;
 		ReadyAt = World.GetTimeSeconds() + Delay;
@@ -280,7 +280,7 @@ private:
 	FString PendingScreenshot;
 	uint64 ScreenshotFrame = 0;
 	int32 Stage = 0;
-	float ReadyAt = 2.0f;
+	double ReadyAt = 2.0;
 	double Started = FPlatformTime::Seconds();
 };
 }

@@ -122,4 +122,16 @@ class FPS_SHOOTER_API AStealthLaboratoryGameMode : public AStealthGameMode
 
 public:
 	AStealthLaboratoryGameMode();
+	virtual void StartPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+private:
+	TArray<TWeakObjectPtr<class ASoundHearingNPC>> InitialGuards;
+	TArray<TWeakObjectPtr<class ATargetPoint>> ReserveSpawns;
+	TSet<EStealthMissionStep> DispatchedSteps;
+	TOptional<EStealthMissionStep> SpawningWave;
+	TArray<TWeakObjectPtr<class ASoundHearingNPC>> ActiveReserve;
+	int32 GuardsSpawnedInWave = 0;
+	float NextReserveSpawn = 0.0f;
+	void SpawnReserveGuard();
 };

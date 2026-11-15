@@ -128,7 +128,7 @@ protected:
 	float CrouchSpeed = 180.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="0.0"))
-	float WalkFootstepVolume = 0.42f;
+	float WalkFootstepVolume = 0.58f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="0.0"))
 	float SprintFootstepVolume = 0.95f;
@@ -139,13 +139,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="1.0"))
 	float CrouchFootstepDistance = 400.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="1.0"))
-	float WalkFootstepDistance = 1000.0f;
+	float WalkFootstepDistance = 1200.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="1.0"))
 	float SprintFootstepDistance = 1800.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="0.0"))
-	float GunshotVolume = 1.6f;
+	float GunshotVolume = 1.85f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="1.0"))
-	float GunshotDistance = 3000.0f;
+	float GunshotDistance = 3300.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="1.0"))
 	float SoftLandingDistance = 400.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound", meta=(ClampMin="1.0"))

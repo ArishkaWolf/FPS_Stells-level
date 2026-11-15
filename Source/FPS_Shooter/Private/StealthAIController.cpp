@@ -50,6 +50,7 @@ void AStealthAIController::Tick(float DeltaSeconds)
 	if (!PlayerPawn.IsValid()) { PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0); }
 	StateTime += DeltaSeconds;
 	TimeUntilNextShot = FMath::Max(0.0f, TimeUntilNextShot - DeltaSeconds);
+	TimeUntilMoveRefresh -= DeltaSeconds;
 	UpdateSight(DeltaSeconds);
 	UpdateHearing(DeltaSeconds);
 	UpdateState(DeltaSeconds);
@@ -85,21 +86,19 @@ void AStealthAIController::GatherPatrolPoints()
 void AStealthAIController::UpdateSight(float DeltaSeconds)
 {
 	FVector SeenLocation;
-	const float Visibility = GetPlayerVisibility(SeenLocation);
-	bPlayerVisible = Visibility > 0.0f;
+	const int32 VisibleSamples = GetVisiblePlayerSamples(SeenLocation);
+	bPlayerVisible = VisibleSamples > 0;
 	if (bPlayerVisible)
 	{
 		LastKnownPlayerLocation = SeenLocation;
 		TimeSincePlayerSeen = 0.0f;
-		const float Distance = FVector::Dist(ControlledNPC->GetActorLocation(), SeenLocation);
-		const float DistanceScale = FMath::GetMappedRangeValueClamped(
-			FVector2D(SightRadius, 150.0f), FVector2D(0.45f, 1.35f), Distance);
-		DetectionLevel = FMath::Clamp(DetectionLevel + DetectionRate * DistanceScale * Visibility * DeltaSeconds, 0.0f, 1.0f);
+		DetectionLevel = VisibleSamples >= 2 ? 1.0f :
+			FMath::Clamp(DetectionLevel + DetectionRate * DeltaSeconds / 3.0f, SuspiciousDetectionThreshold, 1.0f);
 		if (DetectionLevel >= 1.0f && AIState != EStealthAIState::Chase)
 		{
 			SetAIState(EStealthAIState::Chase, SeenLocation);
 		}
-		else if (AIState == EStealthAIState::Patrol && DetectionLevel >= SuspiciousDetectionThreshold)
+		else if (AIState != EStealthAIState::Chase && AIState != EStealthAIState::Suspicious)
 		{
 			bHasSoundFocus = false;
 			SetAIState(EStealthAIState::Suspicious, SeenLocation);
@@ -126,10 +125,11 @@ void AStealthAIController::UpdateHearing(float DeltaSeconds)
 	UNPCHearingComponent* Hearing = ControlledNPC->HearingComponent;
 	if (!Hearing) { return; }
 	FNPCHearingStimulus Sound;
-	if (!Hearing->GetBestSound(Sound) || Sound.Id <= LastProcessedHearingEventId) { return; }
+	if (!Hearing->GetBestSound(Sound, LastProcessedHearingEventId, 4.0f)) { return; }
 	// Consume each selected observation once: old evidence cannot restart a completed search.
 	LastProcessedHearingEventId = Sound.Id;
 	const AActor* Source = Sound.Event.EventId.IsValid() ? Sound.Event.SourceOwner.Get() : PlayerPawn.Get();
+	if (Source && Source->IsA<ASoundHearingNPC>()) { return; }
 	if (const AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>();
 		Mission && Mission->IsActorProtected(Source)) { return; }
 	if (AIState == EStealthAIState::Chase || bPlayerVisible || Sound.Age > 4.0f) { return; }
@@ -178,12 +178,13 @@ void AStealthAIController::UpdateState(float DeltaSeconds)
 		}
 		break;
 	case EStealthAIState::Investigate:
-		if (HasReachedDestination(SearchOrigin) || StateTime >= 7.0f)
+		if (HasReachedDestination(SearchOrigin) || (GetMoveStatus() == EPathFollowingStatus::Idle && StateTime >= 5.0f))
 		{
 			SetAIState(EStealthAIState::Search, SearchOrigin);
 		}
-		else if (GetMoveStatus() == EPathFollowingStatus::Idle)
+		else if (GetMoveStatus() == EPathFollowingStatus::Idle && TimeUntilMoveRefresh <= 0.0f)
 		{
+			TimeUntilMoveRefresh = 0.4f;
 			MoveToLocation(SearchOrigin, 65.0f, true, true, true, false, nullptr, false);
 		}
 		break;
@@ -221,7 +222,11 @@ void AStealthAIController::UpdateState(float DeltaSeconds)
 			CancelBurst();
 			ClearFocus(EAIFocusPriority::Gameplay);
 			SetTurningInPlace(false);
-			MoveToLocation(LastKnownPlayerLocation, 65.0f, true, true, true, false, nullptr, false);
+			if (TimeUntilMoveRefresh <= 0.0f)
+			{
+				TimeUntilMoveRefresh = 0.2f;
+				MoveToLocation(LastKnownPlayerLocation, 65.0f, true, true, true, false, nullptr, false);
+			}
 		}
 		break;
 	}
@@ -250,13 +255,14 @@ void AStealthAIController::SetAIState(EStealthAIState NewState, const FVector& F
 	AIState = NewState;
 	ClearFocus(EAIFocusPriority::Gameplay);
 	StateTime = 0.0f;
+	TimeUntilMoveRefresh = 0.0f;
 	WaitTimeRemaining = 0.0f;
 	bSearchLooking = false;
 	StopMovement();
 	SetTurningInPlace(false);
 	if (PreviousState != NewState)
 	{
-		UE_LOG(LogStealthAI, Display, TEXT("%s: %s -> %s"), *GetNameSafe(GetPawn()),
+		UE_LOG(LogStealthAI, Verbose, TEXT("%s: %s -> %s"), *GetNameSafe(GetPawn()),
 			*UEnum::GetValueAsString(PreviousState), *UEnum::GetValueAsString(NewState));
 	}
 	if (!ControlledNPC.IsValid()) { return; }
@@ -399,7 +405,7 @@ void AStealthAIController::ReactToDamage(AActor* DamageSource)
 	if (!PlayerPawn.IsValid()) { PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0); }
 	if (DamageSource != PlayerPawn.Get()) { return; }
 	FVector Seen;
-	if (CanSeePlayer(Seen))
+	if (GetVisiblePlayerSamples(Seen) > 0)
 	{
 		DetectionLevel = 1.0f;
 		TimeSincePlayerSeen = 0.0f;
@@ -410,6 +416,11 @@ void AStealthAIController::ReactToDamage(AActor* DamageSource)
 		bHasSoundFocus = false;
 		SetAIState(bSearchingForPlayer ? EStealthAIState::Search : EStealthAIState::Investigate, DamageSource->GetActorLocation());
 	}
+}
+
+void AStealthAIController::InvestigateLocation(const FVector& Location)
+{
+	if (ControlledNPC.IsValid()) { SetAIState(EStealthAIState::Investigate, Location); }
 }
 
 void AStealthAIController::StopForDeath()
@@ -423,36 +434,30 @@ void AStealthAIController::StopForDeath()
 	SetActorTickEnabled(false);
 }
 
-float AStealthAIController::GetPlayerVisibility(FVector& OutPlayerLocation) const
+int32 AStealthAIController::GetVisiblePlayerSamples(FVector& OutPlayerLocation) const
 {
-	if (!ControlledNPC.IsValid() || ControlledNPC->IsDead() || !PlayerPawn.IsValid() || !GetWorld()) { return 0.0f; }
-	if (const AStealthCharacter* Player = Cast<AStealthCharacter>(PlayerPawn.Get()); Player && Player->GetHealth() <= 0.0f) { return 0.0f; }
+	if (!ControlledNPC.IsValid() || ControlledNPC->IsDead() || !PlayerPawn.IsValid() || !GetWorld()) { return 0; }
+	if (const AStealthCharacter* Player = Cast<AStealthCharacter>(PlayerPawn.Get()); Player && Player->GetHealth() <= 0.0f) { return 0; }
 	if (const AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>();
-		Mission && Mission->IsActorProtected(PlayerPawn.Get())) { return 0.0f; }
+		Mission && Mission->IsActorProtected(PlayerPawn.Get())) { return 0; }
 	const FVector Eye = ControlledNPC->GetActorLocation() + FVector(0, 0, 70);
 	const FVector Target = PlayerPawn->GetActorLocation();
 	const FVector ToPlayer = Target - Eye;
-	if (ToPlayer.SizeSquared() > FMath::Square(SightRadius)) { return 0.0f; }
+	if (ToPlayer.SizeSquared() > FMath::Square(SightRadius)) { return 0; }
 	const float Dot = FVector::DotProduct(ControlledNPC->GetActorForwardVector().GetSafeNormal2D(), ToPlayer.GetSafeNormal2D());
 	const float MinDot = FMath::Cos(FMath::DegreesToRadians(SightAngleDegrees * 0.5f));
-	if (Dot < MinDot) { return 0.0f; }
+	if (Dot < MinDot) { return 0; }
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(StealthSight), true, ControlledNPC.Get());
+	const float HalfHeight = PlayerPawn->GetSimpleCollisionHalfHeight();
 	int32 VisibleSamples = 0;
-	for (float Height : { -25.0f, 20.0f, 60.0f })
+	for (const float Fraction : { -0.28f, 0.22f, 0.66f })
 	{
 		FHitResult Hit;
-		if (!GetWorld()->LineTraceSingleByChannel(Hit, Eye, Target + FVector(0, 0, Height), ECC_Visibility, Params)
+		if (!GetWorld()->LineTraceSingleByChannel(Hit, Eye, Target + FVector(0, 0, HalfHeight * Fraction), ECC_Visibility, Params)
 			|| Hit.GetActor() == PlayerPawn.Get()) { ++VisibleSamples; }
 	}
-	if (VisibleSamples == 0) { return 0.0f; }
 	OutPlayerLocation = Target;
-	const float Peripheral = FMath::GetMappedRangeValueClamped(FVector2D(MinDot, 0.95f), FVector2D(0.3f, 1.0f), Dot);
-	return VisibleSamples / 3.0f * Peripheral;
-}
-
-bool AStealthAIController::CanSeePlayer(FVector& OutPlayerLocation) const
-{
-	return GetPlayerVisibility(OutPlayerLocation) > 0.0f;
+	return VisibleSamples;
 }
 
 bool AStealthAIController::HasReachedDestination(const FVector& Destination, float AcceptanceRadius) const

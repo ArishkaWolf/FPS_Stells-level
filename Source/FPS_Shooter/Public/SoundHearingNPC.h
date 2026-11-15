@@ -65,16 +65,16 @@ public:
 	float PatrolSpeed = 180.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Movement", meta=(ClampMin="0.0"))
-	float InvestigateSpeed = 260.0f;
+	float InvestigateSpeed = 415.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Movement", meta=(ClampMin="0.0"))
-	float ChaseSpeed = 430.0f;
+	float ChaseSpeed = 480.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(ClampMin="1.0"))
 	float MaxHealth = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(ClampMin="0.0"))
-	float FireDamage = 14.0f;
+	float FireDamage = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(ClampMin="0.0", ClampMax="12.0"))
 	float FireSpreadDegrees = 2.0f;

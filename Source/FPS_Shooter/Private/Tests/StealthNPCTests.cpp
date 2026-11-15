@@ -13,6 +13,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "NPCHearingComponent.h"
 #include "SoundHearingNPC.h"
+#include "SoundRayEmitterComponent.h"
 #include "StealthAIController.h"
 #include "StealthCharacter.h"
 #include "StealthGameMode.h"
@@ -110,14 +111,23 @@ bool FNPCWeakSoundTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Unconfirmed sound does not block extraction"), Scene.Mission->IsPlayerPursued());
 	TestTrue(TEXT("Suspicion stops and turns toward sound"), Scene.Guard->GetVelocity().IsNearlyZero()
 		&& Scene.Guard->GetCharacterMovement()->bUseControllerDesiredRotation);
-	Scene.Advance(1.7f);
+	Scene.Advance(0.7f);
 	TestEqual(TEXT("Suspicious -> Investigate after listening"), Scene.AI->GetAIState(), EStealthAIState::Investigate);
-	Scene.Advance(7.1f);
+	Scene.Advance(5.05f);
 	TestEqual(TEXT("Investigate -> Search on unreachable destination timeout"), Scene.AI->GetAIState(), EStealthAIState::Search);
 	Scene.Advance(1.5f);
 	TestEqual(TEXT("Search -> Patrol"), Scene.AI->GetAIState(), EStealthAIState::Patrol);
 	Scene.Advance(2.0f);
 	TestEqual(TEXT("Old sound cannot restart completed search"), Scene.AI->GetAIState(), EStealthAIState::Patrol);
+	Scene.Player->SetActorLocation(FVector(-600, 0, 200));
+	Scene.Player->GetSoundEmitter()->EmitSoundEvent(ESoundEventType::Footstep);
+	Scene.Advance(0.02f);
+	TestEqual(TEXT("An audible footstep triggers an investigation"), Scene.AI->GetAIState(), EStealthAIState::Investigate);
+	Scene.Player->SetActorLocation(FVector(-1750, 0, 200));
+	Scene.Player->GetSoundEmitter()->EmitSoundEvent(ESoundEventType::Gunshot, 1.85f, 3300.0f);
+	Scene.Advance(0.02f);
+	TestTrue(TEXT("A more distant gunshot takes priority over a footstep"),
+		Scene.AI->GetInvestigationLocation().Equals(Scene.Player->GetActorLocation()));
 	return true;
 }
 
@@ -126,7 +136,7 @@ bool FNPCPartialSightTest::RunTest(const FString& Parameters)
 {
 	FNPCTestWorld Scene;
 	Scene.Player->SetActorLocation(FVector(600, 0, 200));
-	Scene.Cover(FVector(300, 0, 150), FVector(30, 150, 90));
+	Scene.Cover(FVector(300, 0, 150), FVector(30, 150, 103));
 	FHitResult Hit;
 	FCollisionQueryParams SightParams(SCENE_QUERY_STAT(NPCTestSight), true, Scene.Guard);
 	SightParams.AddIgnoredActor(Scene.Player);
@@ -139,10 +149,10 @@ bool FNPCPartialSightTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Partial detection remains below confirmation"), Scene.AI->GetDetectionLevel() > 0.12f && Scene.AI->GetDetectionLevel() < 1.0f);
 	const FVector Observed = Scene.AI->GetLastKnownPlayerLocation();
 	Scene.Player->SetActorLocation(FVector(-3000, 0, 200));
-	Scene.Advance(1.7f);
+	Scene.Advance(0.12f);
 	TestEqual(TEXT("Lost glimpse -> Investigate"), Scene.AI->GetAIState(), EStealthAIState::Investigate);
 	TestTrue(TEXT("Visual investigation uses observation, not hidden player"), Scene.AI->GetInvestigationLocation().Equals(Observed));
-	Scene.Advance(7.1f);
+	Scene.Advance(5.05f);
 	TestEqual(TEXT("Visual Investigate -> Search"), Scene.AI->GetAIState(), EStealthAIState::Search);
 	Scene.Advance(1.5f);
 	TestEqual(TEXT("Visual Search -> Patrol"), Scene.AI->GetAIState(), EStealthAIState::Patrol);
@@ -170,11 +180,11 @@ bool FNPCSoundPriorityTest::RunTest(const FString& Parameters)
 	Hearing->HearSoundAtLocation(FVector(-600, 0, 200), 0.05f);
 	Scene.Advance(0.02f);
 	TestTrue(TEXT("Weak distraction cannot steal a strong investigation"), Scene.AI->GetInvestigationLocation().Equals(FVector(400, 200, 200)));
-	Scene.Advance(6.0f);
+	Scene.Advance(4.2f);
 	Hearing->HearSoundAtLocation(FVector(200, -200, 200), 0.5f);
 	Scene.Advance(0.02f);
 	TestTrue(TEXT("Recent moderate sound outranks old loud evidence"), Scene.AI->GetInvestigationLocation().Equals(FVector(200, -200, 200)));
-	Scene.Advance(7.1f);
+	Scene.Advance(5.05f);
 	TestEqual(TEXT("Strong sound Investigate -> Search"), Scene.AI->GetAIState(), EStealthAIState::Search);
 	Scene.Advance(1.5f);
 	TestEqual(TEXT("Strong sound Search -> Patrol"), Scene.AI->GetAIState(), EStealthAIState::Patrol);
@@ -187,11 +197,11 @@ bool FNPCBurstChaseTest::RunTest(const FString& Parameters)
 	FNPCTestWorld Scene;
 	Scene.Guard->FireDamage = 0.0f;
 	Scene.Player->SetActorLocation(FVector(600, 0, 200));
-	Scene.AI->Tick(3.0f);
-	TestEqual(TEXT("Patrol -> Chase after confirmed sight"), Scene.AI->GetAIState(), EStealthAIState::Chase);
+	Scene.AI->Tick(0.016f);
+	TestEqual(TEXT("An exposed player triggers chase on the first sight update"), Scene.AI->GetAIState(), EStealthAIState::Chase);
 	TestEqual(TEXT("No immediate fire at detection"), Scene.Guard->GetShotsFired(), 0);
 	Scene.Guard->SetActorRotation(FRotator(0, 20, 0));
-	Scene.AI->Tick(0.79f);
+	Scene.AI->Tick(0.54f);
 	TestEqual(TEXT("Reaction delay maintained"), Scene.Guard->GetShotsFired(), 0);
 	Scene.AI->Tick(0.02f);
 	TestEqual(TEXT("Guard must turn toward target before shooting"), Scene.Guard->GetShotsFired(), 0);
@@ -202,7 +212,7 @@ bool FNPCBurstChaseTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Controlled burst contains three shots"), Scene.Guard->GetShotsFired(), 3);
 	Scene.AI->Tick(0.7f);
 	TestEqual(TEXT("Pause between bursts"), Scene.Guard->GetShotsFired(), 3);
-	Scene.AI->Tick(0.71f);
+	Scene.AI->Tick(0.36f);
 	TestEqual(TEXT("Next burst starts after pause"), Scene.Guard->GetShotsFired(), 4);
 	Scene.Cover(FVector(300, 0, 250), FVector(30, 200, 250));
 	Scene.AI->Tick(0.2f);

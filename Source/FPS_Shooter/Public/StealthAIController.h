@@ -42,6 +42,7 @@ public:
 	FText GetStateDisplayName() const;
 
 	void ReactToDamage(AActor* DamageSource);
+	void InvestigateLocation(const FVector& Location);
 	void StopForDeath();
 	FVector GetInvestigationLocation() const { return SearchOrigin; }
 	FVector GetLastKnownPlayerLocation() const { return LastKnownPlayerLocation; }
@@ -60,13 +61,13 @@ protected:
 	float DetectionLevel = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sight", meta=(ClampMin="0.0"))
-	float SightRadius = 1400.0f;
+	float SightRadius = 1850.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sight", meta=(ClampMin="1.0", ClampMax="179.0"))
-	float SightAngleDegrees = 70.0f;
+	float SightAngleDegrees = 95.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sight", meta=(ClampMin="0.0"))
-	float DetectionRate = 0.55f;
+	float DetectionRate = 1.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sight", meta=(ClampMin="0.0"))
 	float DetectionDecayRate = 0.25f;
@@ -84,10 +85,10 @@ protected:
 	float SuspiciousDetectionThreshold = 0.12f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Search", meta=(ClampMin="0.1"))
-	float SuspiciousDuration = 1.6f;
+	float SuspiciousDuration = 0.65f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Search", meta=(ClampMin="0.0"))
-	float SearchDuration = 22.0f;
+	float SearchDuration = 14.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Search", meta=(ClampMin="0.0"))
 	float SearchRadius = 450.0f;
@@ -96,16 +97,16 @@ protected:
 	int32 SearchPointCount = 5;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Search", meta=(ClampMin="0.1"))
-	float SearchLookDuration = 1.25f;
+	float SearchLookDuration = 0.9f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Search", meta=(ClampMin="0.5"))
 	float SearchPointTimeout = 4.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.0"))
-	float FireRange = 1100.0f;
+	float FireRange = 1450.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.1"))
-	float FireInterval = 0.8f;
+	float FireInterval = 0.55f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat", meta=(ClampMin="1", ClampMax="8"))
 	int32 BurstSize = 3;
@@ -114,7 +115,7 @@ protected:
 	float BurstShotInterval = 0.16f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.2"))
-	float BurstPause = 1.4f;
+	float BurstPause = 1.05f;
 
 private:
 	TWeakObjectPtr<ASoundHearingNPC> ControlledNPC;
@@ -127,6 +128,7 @@ private:
 	float WaitTimeRemaining = 0.0f;
 	float TimeSincePlayerSeen = BIG_NUMBER;
 	float TimeUntilNextShot = 0.0f;
+	float TimeUntilMoveRefresh = 0.0f;
 	int32 ShotsRemainingInBurst = 0;
 	bool bSearchingForPlayer = false;
 	bool bStoppedForDeath = false;
@@ -155,7 +157,6 @@ private:
 	void UpdateSearch(float DeltaSeconds);
 	void SetTurningInPlace(bool bEnabled);
 	void CancelBurst();
-	float GetPlayerVisibility(FVector& OutPlayerLocation) const;
-	bool CanSeePlayer(FVector& OutPlayerLocation) const;
+	int32 GetVisiblePlayerSamples(FVector& OutPlayerLocation) const;
 	bool HasReachedDestination(const FVector& Destination, float AcceptanceRadius = 110.0f) const;
 };

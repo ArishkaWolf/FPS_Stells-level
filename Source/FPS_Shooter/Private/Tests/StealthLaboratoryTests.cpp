@@ -9,6 +9,7 @@
 #include "Engine/RectLight.h"
 #include "Engine/StaticMeshActor.h"
 #include "EngineUtils.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerInput.h"
 #include "HAL/FileManager.h"
 #include "ImageUtils.h"
@@ -143,6 +144,7 @@ public:
 			break;
 		case 14:
 			Test.TestTrue(TEXT("The access warning disappears after pickup"), Player->GetAccessWarning().IsEmpty());
+			CheckDoorSwing(*KeycardDoor, *Player);
 			Test.TestEqual(TEXT("The door offers to use the keycard"), Player->GetInteractionPrompt().ToString(), FString(TEXT("Открыть дверь пропуском")));
 			Tap(*PC, EKeys::E);
 			Test.TestTrue(TEXT("E opens the door with the keycard"), KeycardDoor->IsOpen());
@@ -178,6 +180,7 @@ private:
 		{
 			if (FMath::IsNearlyEqual(It->GetActorLocation().Y, 1900.0)) { ServerDoor = *It; }
 			if (It->bRequiresKeycard) { KeycardDoor = *It; }
+			else { CheckDoorSwing(**It, Player); }
 		}
 		for (TActorIterator<AStealthOperationsTerminal> It(&World); It; ++It)
 		{
@@ -251,9 +254,34 @@ private:
 			}
 			if (AController* AI = It->GetController()) { AI->SetActorTickEnabled(false); }
 		}
-		Test.TestEqual(TEXT("Four guards patrol the laboratory"), Guards, 4);
+		Test.TestEqual(TEXT("Five guards patrol the laboratory"), Guards, 5);
 		if (FSceneViewport* VP = Viewport(World)) { VP->SetFixedViewportSize(1280, 720); }
 		return Test.TestTrue(TEXT("A designated guard carries the keycard"), Carrier.IsValid());
+	}
+
+	void CheckDoorSwing(AStealthDoor& Door, AStealthCharacter& Player)
+	{
+		const FVector OriginalPlayer = Player.GetActorLocation();
+		const FVector Closed = Door.DoorMesh->GetComponentLocation();
+		const FVector Normal = Door.GetActorForwardVector();
+		for (const double Side : {-1.0, 1.0})
+		{
+			Player.SetActorLocation(Closed + Normal * Side * 145.0);
+			Test.TestTrue(TEXT("Door can open from either side"), Door.SetOpen(true, &Player));
+			Door.Tick(2.0f);
+			const FVector Leaf = Door.DoorMesh->GetComponentLocation();
+			Test.TestTrue(TEXT("Door swings away from the opener"),
+				FVector::DotProduct(Leaf - Closed, Normal * Side) < -20.0);
+			const FVector Across = Door.DoorMesh->GetForwardVector() * 75.0;
+			FHitResult Hit;
+			Test.TestTrue(TEXT("The open leaf still blocks the player capsule"),
+				Door.DoorMesh->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block &&
+				Door.DoorMesh->SweepComponent(Hit, Leaf - Across, Leaf + Across, FQuat::Identity,
+					FCollisionShape::MakeCapsule(34, 70)));
+			Door.SetOpen(false, &Player);
+			Door.Tick(2.0f);
+		}
+		Player.SetActorLocation(OriginalPlayer);
 	}
 
 	void CheckFixtures(UWorld& World, AStealthCharacter& Player)
@@ -389,6 +417,119 @@ bool FLaboratoryWalkthroughTest::RunTest(const FString& Parameters)
 {
 	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true)) { return false; }
 	ADD_LATENT_AUTOMATION_COMMAND(FLaboratoryWalkthrough(*this));
+	return true;
+}
+
+namespace
+{
+class FReserveWaveCheck : public IAutomationLatentCommand
+{
+public:
+	explicit FReserveWaveCheck(FAutomationTestBase& InTest) : Test(InTest) {}
+
+	bool Update() override
+	{
+		if (FPlatformTime::Seconds() - StartedAt > 90.0)
+		{
+			Test.AddError(FString::Printf(TEXT("Reserve deployment timed out at phase %d"), Phase));
+			return true;
+		}
+		UWorld* World = AutomationCommon::GetAnyGameWorld();
+		if (!World || World->WorldType != EWorldType::PIE || World->GetTimeSeconds() < ReadyAt) { return false; }
+		auto* Mission = World->GetAuthGameMode<AStealthLaboratoryGameMode>();
+		APlayerController* Controller = World->GetFirstPlayerController();
+		auto* Player = Controller ? Cast<AStealthCharacter>(Controller->GetPawn()) : nullptr;
+		if (!Mission || !Player) { Test.AddError(TEXT("Missing the laboratory mission or its player")); return true; }
+		TArray<ASoundHearingNPC*> Initial;
+		TArray<ASoundHearingNPC*> Reserve;
+		for (TActorIterator<ASoundHearingNPC> It(World); It; ++It)
+		{
+			if (It->ActorHasTag(TEXT("Mission.InitialGuard")) && !It->IsDead()) { Initial.Add(*It); }
+			if (It->ActorHasTag(TEXT("Mission.ReserveGuard")) && !It->IsDead())
+			{
+				Reserve.Add(*It);
+				bLeftReserveRoom |= It->GetActorLocation().X < 5200.0 && It->GetVelocity().Size2D() > 10.0;
+			}
+		}
+		if (Phase == 0)
+		{
+			Test.TestEqual(TEXT("There are five initial guards"), Initial.Num(), 5);
+			for (const ASoundHearingNPC* Guard : Initial)
+			{
+				Test.TestEqual(TEXT("The original guard uses the reduced damage"), Guard->FireDamage, 10.0f);
+			}
+			Player->SetActorLocation(FVector(-1300, -1000, 98));
+			Player->GetCharacterMovement()->DisableMovement();
+			for (int32 Index = 1; Index < Initial.Num(); ++Index)
+			{
+				Initial[Index]->TakeDamage(1000, FDamageEvent(), Controller, Player);
+			}
+			ReadyAt = World->GetTimeSeconds() + 1.0f;
+		}
+		else if (Phase == 1)
+		{
+			Test.TestEqual(TEXT("The reserve waits for the fifth original guard"), Reserve.Num(), 0);
+			if (!Test.TestEqual(TEXT("One original guard remains"), Initial.Num(), 1)) { return true; }
+			Initial[0]->TakeDamage(1000, FDamageEvent(), Controller, Player);
+		}
+		else
+		{
+			if (!Test.TestTrue(TEXT("No more than three reserve guards are active"), Reserve.Num() <= 3)) { return true; }
+			if (bClearActiveWave)
+			{
+				Test.TestEqual(TEXT("Stage advancement waits for the active wave"), Reserve.Num(), 3);
+				for (ASoundHearingNPC* Guard : Reserve) { Guard->TakeDamage(1000, FDamageEvent(), Controller, Player); }
+				bClearActiveWave = false;
+				bCheckCooldown = true;
+				ReadyAt = World->GetTimeSeconds() + (WavesObserved == 5 ? 9.0f : 4.0f);
+				return false;
+			}
+			if (bCheckCooldown)
+			{
+				Test.TestEqual(TEXT("No reserve guards during the break or after the final wave"), Reserve.Num(), 0);
+				bCheckCooldown = false;
+				return WavesObserved == 5;
+			}
+			if (Reserve.Num() < 3 || !bLeftReserveRoom) { return false; }
+			for (const ASoundHearingNPC* Guard : Reserve)
+			{
+				Test.TestEqual(TEXT("Reserve guards use the reduced damage"), Guard->FireDamage, 10.0f);
+			}
+			switch (++WavesObserved)
+			{
+			case 1: Test.TestTrue(TEXT("Advance to upload"), Mission->CollectObjective(Player)); break;
+			case 2: Test.TestTrue(TEXT("Advance to keycard"), Mission->UploadData(Player)); break;
+			case 3: Test.TestTrue(TEXT("Advance to verification"), Mission->CollectKeycard(Player)); break;
+			case 4: Test.TestTrue(TEXT("Advance to extraction"), Mission->VerifyArchive(Player)); break;
+			default: break;
+			}
+			bClearActiveWave = true;
+			ReadyAt = World->GetTimeSeconds() + 1.8f;
+			return false;
+		}
+		++Phase;
+		return false;
+	}
+
+private:
+	FAutomationTestBase& Test;
+	double StartedAt = FPlatformTime::Seconds();
+	float ReadyAt = 2.0f;
+	int32 Phase = 0;
+	int32 WavesObserved = 0;
+	bool bLeftReserveRoom = false;
+	bool bClearActiveWave = false;
+	bool bCheckCooldown = false;
+};
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FReserveWaveTest, "FPS_Shooter.Mission.ReserveWaves",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FReserveWaveTest::RunTest(const FString& Parameters)
+{
+	if (!AutomationOpenMap(TEXT("/Game/Laboratory/Maps/ResearchFacility"), true)) { return false; }
+	ADD_LATENT_AUTOMATION_COMMAND(FReserveWaveCheck(*this));
 	return true;
 }
 

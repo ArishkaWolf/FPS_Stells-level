@@ -23,6 +23,8 @@
 # Any file in /RawContent dir will be managed by git lfs.
 !/RawContent/**/*
 
+!/docs/screenshots/*.png
+
 # OS/platform generated files.
 
 # Windows

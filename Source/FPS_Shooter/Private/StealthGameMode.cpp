@@ -1,8 +1,10 @@
 #include "StealthGameMode.h"
 
 #include "EngineUtils.h"
+#include "Engine/TargetPoint.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
+#include "SoundHearingNPC.h"
 #include "StealthAIController.h"
 #include "StealthCharacter.h"
 #include "StealthHUD.h"
@@ -22,6 +24,86 @@ AStealthGameMode::AStealthGameMode()
 AStealthLaboratoryGameMode::AStealthLaboratoryGameMode()
 {
 	bExtendedObjectives = true;
+}
+
+void AStealthLaboratoryGameMode::StartPlay()
+{
+	Super::StartPlay();
+	for (TActorIterator<ASoundHearingNPC> It(GetWorld()); It; ++It)
+	{
+		if (It->ActorHasTag(TEXT("Mission.InitialGuard"))) { InitialGuards.Add(*It); }
+	}
+	for (TActorIterator<ATargetPoint> It(GetWorld()); It; ++It)
+	{
+		if (It->ActorHasTag(TEXT("Mission.ReserveSpawn"))) { ReserveSpawns.Add(*It); }
+	}
+}
+
+void AStealthLaboratoryGameMode::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (GetMissionState() != EStealthMissionState::Playing || InitialGuards.IsEmpty() || ReserveSpawns.IsEmpty()) { return; }
+	for (const TWeakObjectPtr<ASoundHearingNPC>& Guard : InitialGuards)
+	{
+		if (Guard.IsValid() && !Guard->IsDead()) { return; }
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!SpawningWave.IsSet())
+	{
+		if (!ActiveReserve.IsEmpty())
+		{
+			ActiveReserve.RemoveAll([](const TWeakObjectPtr<ASoundHearingNPC>& Guard)
+			{
+				return !Guard.IsValid() || Guard->IsDead();
+			});
+			if (!ActiveReserve.IsEmpty()) { return; }
+			NextReserveSpawn = Now + 8.0f;
+		}
+		const EStealthMissionStep Step = GetMissionStep();
+		if (Now < NextReserveSpawn || DispatchedSteps.Contains(Step)) { return; }
+		DispatchedSteps.Add(Step);
+		SpawningWave = Step;
+	}
+	if (Now >= NextReserveSpawn)
+	{
+		NextReserveSpawn = Now + 0.7f;
+		SpawnReserveGuard();
+	}
+}
+
+void AStealthLaboratoryGameMode::SpawnReserveGuard()
+{
+	static const FVector DispatchLocations[] = {
+		FVector(4380, 1715, 0), FVector(2490, 1300, 0), FVector(4760, 1690, 0),
+		FVector(5040, 1690, 0), FVector(500, 1700, 0)
+	};
+	static const FName PatrolRoutes[] = { TEXT("Intel"), TEXT("South"), TEXT("Courtyard") };
+	const FVector Destination = DispatchLocations[static_cast<int32>(SpawningWave.GetValue())] +
+		FVector((GuardsSpawnedInWave - 1) * 55, (GuardsSpawnedInWave % 2 == 0 ? -45 : 45), 0);
+	for (int32 Offset = 0; Offset < ReserveSpawns.Num(); ++Offset)
+	{
+		const ATargetPoint* Point = ReserveSpawns[(GuardsSpawnedInWave + Offset) % ReserveSpawns.Num()].Get();
+		if (!Point) { continue; }
+		const FTransform Transform = Point->GetActorTransform();
+		auto* Guard = GetWorld()->SpawnActorDeferred<ASoundHearingNPC>(ASoundHearingNPC::StaticClass(), Transform,
+			nullptr, nullptr, ESpawnActorCollisionHandlingMethod::DontSpawnIfColliding);
+		if (!Guard) { continue; }
+		Guard->PatrolRouteName = PatrolRoutes[GuardsSpawnedInWave];
+		Guard->Tags.Add(TEXT("Mission.ReserveGuard"));
+		Guard->FinishSpawning(Transform);
+		if (!IsValid(Guard)) { continue; }
+		ActiveReserve.Add(Guard);
+		if (auto* AI = Cast<AStealthAIController>(Guard->GetController()))
+		{
+			AI->InvestigateLocation(Destination);
+		}
+		if (++GuardsSpawnedInWave == UE_ARRAY_COUNT(PatrolRoutes))
+		{
+			SpawningWave.Reset();
+			GuardsSpawnedInWave = 0;
+		}
+		return;
+	}
 }
 
 void AStealthGameMode::StartPlay()

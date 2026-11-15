@@ -353,26 +353,13 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 	const FLinearColor ExitColor = bCanExtract ? (bPursued ? Amber : Mint) : Muted;
 	const FLinearColor PlayerColor(0.48f, 0.81f, 1.0f);
 	const FVector2D PlayerPin = ProjectMap(FVector2D(Character.GetActorLocation()));
-	const float ViewYaw = Character.GetViewRotation().Yaw;
-	const FVector2D Forward = FVector2D(FMath::Cos(FMath::DegreesToRadians(ViewYaw)), -FMath::Sin(FMath::DegreesToRadians(ViewYaw)));
-	const FVector2D Side(-Forward.Y, Forward.X);
-	FLinearColor Sector = PlayerColor;
-	Sector.A = 0.28f;
-	for (int32 Step = 0; Step < 12; ++Step)
-	{
-		const auto Edge = [&](int32 Index)
-		{
-			const float Angle = FMath::DegreesToRadians(-34.0f + 68.0f * Index / 12.0f);
-			const FVector2D Point = PlayerPin + (Forward * FMath::Cos(Angle) + Side * FMath::Sin(Angle)) * 39.0;
-			return FVector2D(FMath::Clamp(Point.X, MapAt.X, MapAt.X + MapSize.X),
-				FMath::Clamp(Point.Y, MapAt.Y, MapAt.Y + MapSize.Y));
-		};
-		UI.Triangle(PlayerPin, Edge(Step), Edge(Step + 1), Sector);
-	}
+
 	TOptional<FVector> Destination;
 	for (TActorIterator<AStealthSupplyPickup> It(GetWorld()); It; ++It)
 	{
-		const FVector2D Pin = ProjectMap(FVector2D(It->GetActorLocation()));
+		const FVector Position = It->GetActorLocation() +
+			(It->ActorHasTag(TEXT("Mission.ShelfMedkit")) ? It->GetActorForwardVector() * 65.0 : FVector::ZeroVector);
+		const FVector2D Pin = ProjectMap(FVector2D(Position));
 		const bool bMedkit = It->GetKind() == EStealthSupplyKind::Medkit;
 		UI.Box(Panel, Pin - FVector2D(8, 8), FVector2D(16, 16));
 		DrawSupplyIcon(UI, Pin, bMedkit, bMedkit ? AidColor : Amber);
@@ -420,56 +407,40 @@ void AStealthHUD::DrawTacticalMap(const AStealthGameMode& Mission, const AStealt
 		const FVector2D Pin = ProjectMap(FVector2D(It->GetActorLocation()));
 		UI.Box(ExitColor, Pin - FVector2D(8, 8), FVector2D(16, 16));
 		UI.Box(Panel, Pin - FVector2D(5, 5), FVector2D(10, 10));
-		UI.Text(TEXT("Эвакуация"), Pin + FVector2D(12, -7), ExitColor, 0.86f);
 	}
 
-	const FVector2D Tip = PlayerPin + Forward * 19.0;
-	const FVector2D Tail = PlayerPin - Forward * 7.0;
-	const FVector2D Left = Tail + Side * 7.0;
-	const FVector2D Right = Tail - Side * 7.0;
-	UI.Line(Tail, PlayerPin + Forward * 38.0, Panel, 3.4f);
-	UI.Line(Tail, PlayerPin + Forward * 38.0, PlayerColor, 1.35f);
-	UI.Triangle(Tip, Left, PlayerPin, PlayerColor);
-	UI.Triangle(Tip, PlayerPin, Right, PlayerColor);
-	UI.Line(Tip, Left, Panel, 1.25f);
-	UI.Line(Tip, Right, Panel, 1.25f);
-	UI.Line(Left, PlayerPin, Panel, 1.25f);
-	UI.Line(Right, PlayerPin, Panel, 1.25f);
-	const FVector2D North = MapAt + FVector2D(MapSize.X - 20, 25);
-	UI.Box(Panel, North - FVector2D(12, 16), FVector2D(24, 39));
-	UI.Center(TEXT("С"), North - FVector2D(0, 7), Ink, 0.88f, Bold);
-	UI.Triangle(North + FVector2D(0, 2), North + FVector2D(-5, 16), North + FVector2D(5, 16), Ink);
+	UI.Box(Panel, PlayerPin - FVector2D(6, 6), FVector2D(12, 12));
+	UI.Box(PlayerColor, PlayerPin - FVector2D(3, 3), FVector2D(6, 6));
 	const FVector2D Ruler = MapAt + FVector2D(MapSize.X - 15 - 2000 * Fit, MapSize.Y - 14);
 	UI.Line(Ruler, Ruler + FVector2D(2000 * Fit, 0), Ink, 1.5f);
 	UI.Center(TEXT("20 м"), Ruler + FVector2D(1000 * Fit, -9), Ink, 0.72f);
 
 	const FVector2D Legend = At + FVector2D(555, 72);
 	UI.Text(TEXT("ОБОЗНАЧЕНИЯ"), Legend, Muted, 0.82f);
-	const TCHAR* Headings[] = {TEXT("В"), TEXT("СВ"), TEXT("С"), TEXT("СЗ"), TEXT("З"), TEXT("ЮЗ"), TEXT("Ю"), TEXT("ЮВ")};
-	const int32 Heading = FMath::RoundToInt(ViewYaw / 45.0f);
-	UI.Text(FString::Printf(TEXT("Вы смотрите на %s"), Headings[(Heading % 8 + 8) % 8]),
-		Legend + FVector2D(0, 31), PlayerColor);
-	UI.Text(Mission.HasKeycard() ? TEXT("Пропуск получен") : TEXT("Цель миссии"), Legend + FVector2D(0, 65), Amber);
-	UI.Text(TEXT("Точка эвакуации"), Legend + FVector2D(0, 99), ExitColor);
-	const TCHAR* ExitStatus = !bCanExtract ? TEXT("Откроется после выполнения задач")
-		: bPursued ? TEXT("Оторвитесь от охраны") : TEXT("Доступна");
-	const float StatusScale = FMath::Min(.82f, 183.0f / FMath::Max(1.0, UI.Measure(ExitStatus, 1.0f).X));
-	UI.Text(ExitStatus, Legend + FVector2D(0, 122), Muted, StatusScale);
-	UI.Box(Track, Legend + FVector2D(0, 162), FVector2D(194, 1));
-	UI.Text(TEXT("ТЕКУЩАЯ ЦЕЛЬ"), Legend + FVector2D(0, 180), Muted, 0.82f, Bold);
+	DrawSupplyIcon(UI, Legend + FVector2D(6, 36), true, AidColor);
+	UI.Text(TEXT("Аптечка"), Legend + FVector2D(19, 29), Ink, 0.9f);
+	DrawSupplyIcon(UI, Legend + FVector2D(6, 61), false, Amber);
+	UI.Text(TEXT("Патроны"), Legend + FVector2D(19, 54), Ink, 0.9f);
+	UI.Box(Amber, Legend + FVector2D(2, 82), FVector2D(8, 8));
+	UI.Text(TEXT("Цель миссии"), Legend + FVector2D(19, 79), Ink, 0.9f);
+	UI.Box(Track, Legend + FVector2D(0, 116), FVector2D(194, 1));
+	UI.Text(TEXT("ТЕКУЩАЯ ЦЕЛЬ"), Legend + FVector2D(0, 135), Muted, 0.82f, Bold);
 	const FString Active = Mission.GetObjectiveText();
 	const float TaskScale = FMath::Min(.94f, 183.0f / FMath::Max(1.0f, UI.Measure(Active, 1.0f).X));
-	UI.Text(Active, Legend + FVector2D(0, 205), Mint, TaskScale);
+	UI.Text(Active, Legend + FVector2D(0, 159), Mint, TaskScale);
 	if (Destination)
 	{
 		UI.Text(FString::Printf(TEXT("%d м по прямой"), FMath::RoundToInt(
 			FVector::Dist2D(Character.GetActorLocation(), Destination.GetValue()) / 100.0)),
-			Legend + FVector2D(0, 225), Muted, 0.85f);
+			Legend + FVector2D(0, 181), Muted, 0.85f);
 	}
-	DrawSupplyIcon(UI, Legend + FVector2D(6, 254), true, AidColor);
-	UI.Text(TEXT("Аптечка"), Legend + FVector2D(19, 247), Ink, 0.9f);
-	DrawSupplyIcon(UI, Legend + FVector2D(6, 279), false, Amber);
-	UI.Text(TEXT("Патроны"), Legend + FVector2D(19, 272), Ink, 0.9f);
+	UI.Box(ExitColor, Legend + FVector2D(0, 218), FVector2D(12, 12));
+	UI.Box(Panel, Legend + FVector2D(2, 220), FVector2D(8, 8));
+	UI.Text(TEXT("Точка эвакуации"), Legend + FVector2D(19, 216), ExitColor, 0.9f);
+	const TCHAR* ExitStatus = !bCanExtract ? TEXT("Откроется после выполнения задач")
+		: bPursued ? TEXT("Оторвитесь от охраны") : TEXT("Доступна");
+	const float StatusScale = FMath::Min(.82f, 183.0f / FMath::Max(1.0f, UI.Measure(ExitStatus, 1.0f).X));
+	UI.Text(ExitStatus, Legend + FVector2D(0, 238), Muted, StatusScale);
 	UI.Text(TEXT("Игра на паузе"), At + FVector2D(24, 432), Muted, 0.86f);
 }
 

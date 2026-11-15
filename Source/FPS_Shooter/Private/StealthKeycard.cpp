@@ -20,8 +20,8 @@ AStealthKeycard::AStealthKeycard()
 	Target->SetCanEverAffectNavigation(false);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Amber(TEXT("/Game/Laboratory/Materials/M_StripeAmber.M_StripeAmber"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Steel(TEXT("/Game/Industrial/Materials/M_MatteSteel.M_MatteSteel"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> CardFinish(TEXT("/Game/Laboratory/Materials/M_StripeAmber.M_StripeAmber"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> StripeFinish(TEXT("/Game/Industrial/Materials/M_MatteSteel.M_MatteSteel"));
 	const auto AddPart = [this, Target](FName Name, const FVector& Position, const FVector& Scale, UMaterialInterface* Material)
 	{
 		auto* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
@@ -33,8 +33,8 @@ AStealthKeycard::AStealthKeycard()
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Part->SetCanEverAffectNavigation(false);
 	};
-	AddPart(TEXT("Card"), FVector(0, 0, -8), FVector(.13, .085, .012), Amber.Object);
-	AddPart(TEXT("Stripe"), FVector(0, -2, -7.3), FVector(.12, .02, .002), Steel.Object);
+	AddPart(TEXT("Card"), FVector(0, 0, -8), FVector(.13, .085, .012), CardFinish.Object);
+	AddPart(TEXT("Stripe"), FVector(0, -2, -7.3), FVector(.12, .02, .002), StripeFinish.Object);
 }
 
 void AStealthKeycard::Interact_Implementation(AStealthCharacter* InteractingCharacter)
