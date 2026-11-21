@@ -22,6 +22,7 @@ public:
 	ASoundHearingNPC();
 	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 		AController* EventInstigator, AActor* DamageCauser) override;
+	void ApplyDifficultyDamageMultiplier(float Multiplier);
 	bool FireWeaponAt(AActor* TargetActor);
 	UFUNCTION(BlueprintPure, Category="Combat")
 	bool IsDead() const { return bDead; }
@@ -115,6 +116,8 @@ private:
 	float FireAnimationAge = BIG_NUMBER;
 	float HitAnimationAge = BIG_NUMBER;
 	float DeathAnimationAge = 0.0f;
+	float UnscaledFireDamage = 10.0f;
+	bool bHasCachedFireDamage = false;
 	FVector LastShotDirection = FVector::ForwardVector;
 	FVector LastShotAimDirection = FVector::ForwardVector;
 	void Die();

@@ -4,6 +4,8 @@
 #include "GameFramework/PlayerController.h"
 #include "StealthPlayerController.generated.h"
 
+enum class EStealthDifficulty : uint8;
+
 UCLASS()
 class FPS_SHOOTER_API AStealthPlayerController : public APlayerController
 {
@@ -18,6 +20,7 @@ public:
 	bool IsSettingsMenuOpen() const { return bSettingsMenuOpen; }
 	float GetMouseSensitivity() const { return MouseSensitivity; }
 	float GetAimSensitivityMultiplier() const { return AimSensitivityMultiplier; }
+	EStealthDifficulty GetDifficulty() const;
 	bool IsFullscreenEnabled() const;
 	void HandleMenuButton(FName ButtonName);
 

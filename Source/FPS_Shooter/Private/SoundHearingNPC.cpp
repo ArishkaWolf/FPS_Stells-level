@@ -112,6 +112,12 @@ void ASoundHearingNPC::BeginPlay()
 {
 	Super::BeginPlay();
 	CurrentHealth = FMath::Max(1.0f, MaxHealth);
+	UnscaledFireDamage = FireDamage;
+	bHasCachedFireDamage = true;
+	if (const AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>())
+	{
+		ApplyDifficultyDamageMultiplier(Mission->GetNPCDamageMultiplier());
+	}
 	// Calibrate in the actual rifle idle pose. Model +Y is the barrel direction.
 	GetMesh()->TickAnimation(0.0f, false);
 	GetMesh()->RefreshBoneTransforms();
@@ -120,6 +126,16 @@ void ASoundHearingNPC::BeginPlay()
 		* FRotationMatrix::MakeFromYZ(GetActorForwardVector(), FVector::UpVector).ToQuat();
 	const FVector Grip = WeaponMesh->GetSocketTransform(TEXT("Grip_Bone"), RTS_Component).GetLocation();
 	WeaponMesh->SetRelativeTransform(FTransform(Rotation, -Rotation.RotateVector(Grip)));
+}
+
+void ASoundHearingNPC::ApplyDifficultyDamageMultiplier(float Multiplier)
+{
+	if (!bHasCachedFireDamage)
+	{
+		UnscaledFireDamage = FireDamage;
+		bHasCachedFireDamage = true;
+	}
+	FireDamage = FMath::Max(0.0f, UnscaledFireDamage * FMath::Max(0.0f, Multiplier));
 }
 
 bool ASoundHearingNPC::FireWeaponAt(AActor* TargetActor)

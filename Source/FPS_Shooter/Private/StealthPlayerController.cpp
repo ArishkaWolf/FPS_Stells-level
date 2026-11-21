@@ -93,6 +93,12 @@ bool AStealthPlayerController::IsFullscreenEnabled() const
 	return Settings && Settings->GetFullscreenMode() != EWindowMode::Windowed;
 }
 
+EStealthDifficulty AStealthPlayerController::GetDifficulty() const
+{
+	const AStealthGameMode* Mission = GetWorld() ? GetWorld()->GetAuthGameMode<AStealthGameMode>() : nullptr;
+	return Mission ? Mission->GetDifficulty() : EStealthDifficulty::Private;
+}
+
 void AStealthPlayerController::StartMission()
 {
 	bMainMenuOpen = false;
@@ -138,6 +144,16 @@ void AStealthPlayerController::HandleMenuButton(FName ButtonName)
 	else if (ButtonName == TEXT("MenuLookUp")) { MouseSensitivity = FMath::Clamp(MouseSensitivity + 0.1f, 0.1f, 3.0f); SaveSensitivitySettings(); }
 	else if (ButtonName == TEXT("MenuAimDown")) { AimSensitivityMultiplier = FMath::Clamp(AimSensitivityMultiplier - 0.1f, 0.2f, 1.5f); SaveSensitivitySettings(); }
 	else if (ButtonName == TEXT("MenuAimUp")) { AimSensitivityMultiplier = FMath::Clamp(AimSensitivityMultiplier + 0.1f, 0.2f, 1.5f); SaveSensitivitySettings(); }
+	else if (ButtonName == TEXT("MenuDifficultyRecruit") || ButtonName == TEXT("MenuDifficultyPrivate")
+		|| ButtonName == TEXT("MenuDifficultyVeteran"))
+	{
+		if (AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>())
+		{
+			const EStealthDifficulty Selected = ButtonName == TEXT("MenuDifficultyRecruit") ? EStealthDifficulty::Recruit
+				: ButtonName == TEXT("MenuDifficultyVeteran") ? EStealthDifficulty::Veteran : EStealthDifficulty::Private;
+			Mission->SetDifficulty(Selected);
+		}
+	}
 	else if (ButtonName == TEXT("MenuFullscreen"))
 	{
 		if (UGameUserSettings* Settings = GEngine ? GEngine->GetGameUserSettings() : nullptr)
@@ -161,7 +177,7 @@ void AStealthPlayerController::BeginSensitivitySliderDrag()
 	if (ViewX <= 0 || ViewY <= 0) { return; }
 	const float Scale = FMath::Min(ViewX / 960.0f, ViewY / 540.0f);
 	const FVector2D LogicalSize(ViewX / Scale, ViewY / Scale);
-	const float PanelTop = (LogicalSize.Y - 470.0f) * 0.5f;
+	const float PanelTop = (LogicalSize.Y - 520.0f) * 0.5f;
 	const float LogicalY = MouseY / Scale;
 	if (LogicalY >= PanelTop + 164.0f && LogicalY <= PanelTop + 204.0f)
 	{

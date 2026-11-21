@@ -31,6 +31,14 @@ enum class EStealthMissionStep : uint8
 	Extract
 };
 
+UENUM(BlueprintType)
+enum class EStealthDifficulty : uint8
+{
+	Recruit,
+	Private,
+	Veteran
+};
+
 UCLASS()
 class FPS_SHOOTER_API AStealthGameMode : public AGameModeBase
 {
@@ -74,6 +82,9 @@ public:
 	bool HasObjective() const { return bObjectiveCollected; }
 
 	EStealthMissionStep GetMissionStep() const;
+	EStealthDifficulty GetDifficulty() const { return Difficulty; }
+	void SetDifficulty(EStealthDifficulty NewDifficulty);
+	float GetNPCDamageMultiplier() const;
 	bool HasExtendedObjectives() const { return bExtendedObjectives; }
 	bool HasUploadedData() const { return bDataUploaded; }
 	bool HasKeycard() const { return bKeycardCollected; }
@@ -99,6 +110,7 @@ private:
 	bool bRestartRequested = false;
 	bool bMissionResultReady = false;
 	float MissionTime = 0.0f;
+	EStealthDifficulty Difficulty = EStealthDifficulty::Private;
 
 	UPROPERTY(VisibleAnywhere, Category="Mission")
 	EStealthMissionState MissionState = EStealthMissionState::Playing;
@@ -133,5 +145,6 @@ private:
 	TArray<TWeakObjectPtr<class ASoundHearingNPC>> ActiveReserve;
 	int32 GuardsSpawnedInWave = 0;
 	float NextReserveSpawn = 0.0f;
+	int32 GetReinforcementsPerWave() const;
 	void SpawnReserveGuard();
 };

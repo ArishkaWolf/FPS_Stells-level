@@ -10,6 +10,8 @@
 #include "StealthHUD.h"
 #include "StealthPlayerController.h"
 #include "TimerManager.h"
+#include "CoreGlobals.h"
+#include "Misc/ConfigCacheIni.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogStealthMission, Log, All);
 
@@ -19,6 +21,31 @@ AStealthGameMode::AStealthGameMode()
 	DefaultPawnClass = AStealthCharacter::StaticClass();
 	HUDClass = AStealthHUD::StaticClass();
 	PlayerControllerClass = AStealthPlayerController::StaticClass();
+}
+
+void AStealthGameMode::SetDifficulty(EStealthDifficulty NewDifficulty)
+{
+	Difficulty = NewDifficulty;
+	if (!GIsAutomationTesting && GConfig)
+	{
+		GConfig->SetInt(TEXT("Gameplay"), TEXT("Difficulty"), static_cast<int32>(Difficulty), GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
+	for (TActorIterator<ASoundHearingNPC> It(GetWorld()); It; ++It)
+	{
+		It->ApplyDifficultyDamageMultiplier(GetNPCDamageMultiplier());
+	}
+}
+
+float AStealthGameMode::GetNPCDamageMultiplier() const
+{
+	switch (Difficulty)
+	{
+	case EStealthDifficulty::Recruit: return 0.05f;
+	case EStealthDifficulty::Private: return 0.7f;
+	case EStealthDifficulty::Veteran: return 1.0f;
+	default: return 0.7f;
+	}
 }
 
 AStealthLaboratoryGameMode::AStealthLaboratoryGameMode()
@@ -42,7 +69,8 @@ void AStealthLaboratoryGameMode::StartPlay()
 void AStealthLaboratoryGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (GetMissionState() != EStealthMissionState::Playing || InitialGuards.IsEmpty() || ReserveSpawns.IsEmpty()) { return; }
+	if (GetMissionState() != EStealthMissionState::Playing || GetReinforcementsPerWave() == 0
+		|| InitialGuards.IsEmpty() || ReserveSpawns.IsEmpty()) { return; }
 	for (const TWeakObjectPtr<ASoundHearingNPC>& Guard : InitialGuards)
 	{
 		if (Guard.IsValid() && !Guard->IsDead()) { return; }
@@ -71,6 +99,17 @@ void AStealthLaboratoryGameMode::Tick(float DeltaSeconds)
 	}
 }
 
+int32 AStealthLaboratoryGameMode::GetReinforcementsPerWave() const
+{
+	switch (GetDifficulty())
+	{
+	case EStealthDifficulty::Recruit: return 0;
+	case EStealthDifficulty::Private: return 1;
+	case EStealthDifficulty::Veteran: return 3;
+	default: return 1;
+	}
+}
+
 void AStealthLaboratoryGameMode::SpawnReserveGuard()
 {
 	static const FVector DispatchLocations[] = {
@@ -79,7 +118,7 @@ void AStealthLaboratoryGameMode::SpawnReserveGuard()
 	};
 	static const FName PatrolRoutes[] = { TEXT("Intel"), TEXT("South"), TEXT("Courtyard") };
 	const FVector Destination = DispatchLocations[static_cast<int32>(SpawningWave.GetValue())] +
-		FVector((GuardsSpawnedInWave - 1) * 55, (GuardsSpawnedInWave % 2 == 0 ? -45 : 45), 0);
+		FVector(GuardsSpawnedInWave * 55, (GuardsSpawnedInWave % 2 == 0 ? -45 : 45), 0);
 	for (int32 Offset = 0; Offset < ReserveSpawns.Num(); ++Offset)
 	{
 		const ATargetPoint* Point = ReserveSpawns[(GuardsSpawnedInWave + Offset) % ReserveSpawns.Num()].Get();
@@ -97,7 +136,7 @@ void AStealthLaboratoryGameMode::SpawnReserveGuard()
 		{
 			AI->InvestigateLocation(Destination);
 		}
-		if (++GuardsSpawnedInWave == UE_ARRAY_COUNT(PatrolRoutes))
+		if (++GuardsSpawnedInWave >= GetReinforcementsPerWave())
 		{
 			SpawningWave.Reset();
 			GuardsSpawnedInWave = 0;
@@ -108,6 +147,16 @@ void AStealthLaboratoryGameMode::SpawnReserveGuard()
 
 void AStealthGameMode::StartPlay()
 {
+	int32 SavedDifficulty = static_cast<int32>(EStealthDifficulty::Private);
+	if (GIsAutomationTesting)
+	{
+		Difficulty = EStealthDifficulty::Veteran;
+	}
+	else if (GConfig)
+	{
+		GConfig->GetInt(TEXT("Gameplay"), TEXT("Difficulty"), SavedDifficulty, GGameUserSettingsIni);
+		Difficulty = static_cast<EStealthDifficulty>(FMath::Clamp(SavedDifficulty, 0, 2));
+	}
 	// Initialize before Super starts AI and other actors.
 	if (const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0))
 	{
@@ -115,6 +164,10 @@ void AStealthGameMode::StartPlay()
 		bSafeZoneInitialized = true;
 	}
 	Super::StartPlay();
+	for (TActorIterator<ASoundHearingNPC> It(GetWorld()); It; ++It)
+	{
+		It->ApplyDifficultyDamageMultiplier(GetNPCDamageMultiplier());
+	}
 	// Replace stale prototype tiles using the current mission bounds so all destinations are reachable.
 	if (UNavigationSystemV1* Navigation = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
 	{

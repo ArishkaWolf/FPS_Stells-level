@@ -186,9 +186,9 @@ void DrawLaunchMenu(AStealthHUD& HUD, const AStealthPlayerController& Controller
 	if (Controller.IsSettingsMenuOpen())
 	{
 		const float SettingsWidth = FMath::Min(900.0f, UI.Size.X - 48.0f);
-		const FVector2D SettingsAt(Center.X - SettingsWidth * 0.5f, Center.Y - 235.0f);
-		UI.Box(Panel, SettingsAt, FVector2D(SettingsWidth, 470));
-		UI.Box(Mint, SettingsAt, FVector2D(3, 470));
+		const FVector2D SettingsAt(Center.X - SettingsWidth * 0.5f, Center.Y - 260.0f);
+		UI.Box(Panel, SettingsAt, FVector2D(SettingsWidth, 520));
+		UI.Box(Mint, SettingsAt, FVector2D(3, 520));
 		UI.Text(TEXT("FPS / STEALTH"), SettingsAt + FVector2D(30, 24), Mint, 1.15f, Bold);
 		UI.Text(TEXT("ИССЛЕДОВАТЕЛЬСКИЙ КОМПЛЕКС"), SettingsAt + FVector2D(30, 55), Muted, 0.8f, Bold);
 		UI.Line(SettingsAt + FVector2D(30, 87), SettingsAt + FVector2D(SettingsWidth - 30, 87), Track, 1.4f);
@@ -209,21 +209,41 @@ void DrawLaunchMenu(AStealthHUD& HUD, const AStealthPlayerController& Controller
 		Slider(TEXT("ЧУВСТВИТЕЛЬНОСТЬ"), Controller.GetMouseSensitivity(), 0.1f, 3.0f, 135);
 		Slider(TEXT("ЧУВСТВИТЕЛЬНОСТЬ ПРИЦЕЛА"), Controller.GetAimSensitivityMultiplier(), 0.2f, 1.5f, 237);
 
-		const float ButtonY = SettingsAt.Y + 354;
+		UI.Text(TEXT("СЛОЖНОСТЬ"), SettingsAt + FVector2D(30, 330), Ink, 0.88f, Bold);
+		const float DifficultyY = SettingsAt.Y + 356;
 		const float ButtonGap = 14.0f;
-		const float ButtonWidth = (SettingsWidth - 60.0f - ButtonGap) * 0.5f;
+		const float DifficultyGap = 10.0f;
+		const float DifficultyWidth = (SettingsWidth - 60.0f - DifficultyGap * 2.0f) / 3.0f;
+		auto DifficultyButton = [&](const TCHAR* Label, float X, FName Name, bool bSelected)
+		{
+			const FVector2D At(X, DifficultyY);
+			const FVector2D Extent(DifficultyWidth, 44);
+			UI.Box(bSelected ? FLinearColor(0.09f, 0.26f, 0.23f, 0.96f) : Track, At, Extent);
+			UI.Box(bSelected ? Mint : FLinearColor(0.22f, 0.33f, 0.35f), At, FVector2D(3, Extent.Y));
+			UI.Center(Label, At + Extent * 0.5, Ink, 0.82f, Bold);
+			HUD.AddHitBox(At * UI.Scale, Extent * UI.Scale, Name, true);
+		};
+		const EStealthDifficulty Difficulty = Controller.GetDifficulty();
+		DifficultyButton(TEXT("НОВОБРАНЕЦ"), SettingsAt.X + 30, TEXT("MenuDifficultyRecruit"), Difficulty == EStealthDifficulty::Recruit);
+		DifficultyButton(TEXT("РЯДОВОЙ"), SettingsAt.X + 30 + DifficultyWidth + DifficultyGap,
+			TEXT("MenuDifficultyPrivate"), Difficulty == EStealthDifficulty::Private);
+		DifficultyButton(TEXT("ВЕТЕРАН"), SettingsAt.X + 30 + 2 * (DifficultyWidth + DifficultyGap),
+			TEXT("MenuDifficultyVeteran"), Difficulty == EStealthDifficulty::Veteran);
+
+		const float ActionY = SettingsAt.Y + 438;
+		const float ActionWidth = (SettingsWidth - 60.0f - ButtonGap) * 0.5f;
 		auto SettingsButton = [&](const TCHAR* Label, float X, FName Name)
 		{
-			const FVector2D At(X, ButtonY);
-			const FVector2D Extent(ButtonWidth, 48);
+			const FVector2D At(X, ActionY);
+			const FVector2D Extent(ActionWidth, 48);
 			UI.Box(Track, At, Extent);
 			UI.Box(FLinearColor(0.22f, 0.33f, 0.35f), At, FVector2D(3, Extent.Y));
-			UI.Center(Label, At + Extent * 0.5, Ink, 0.84f, Bold);
+			UI.Center(Label, At + Extent * 0.5, Ink, 0.82f, Bold);
 			HUD.AddHitBox(At * UI.Scale, Extent * UI.Scale, Name, true);
 		};
 		SettingsButton(Controller.IsFullscreenEnabled() ? TEXT("ПОЛНЫЙ ЭКРАН: ВКЛ") : TEXT("ПОЛНЫЙ ЭКРАН: ВЫКЛ"),
 			SettingsAt.X + 30, TEXT("MenuFullscreen"));
-		SettingsButton(TEXT("НАЗАД"), SettingsAt.X + 30 + ButtonWidth + ButtonGap, TEXT("MenuBack"));
+		SettingsButton(TEXT("НАЗАД"), SettingsAt.X + 30 + ActionWidth + ButtonGap, TEXT("MenuBack"));
 		return;
 	}
 	const float PanelWidth = FMath::Min(500.0, UI.Size.X - 36.0);
