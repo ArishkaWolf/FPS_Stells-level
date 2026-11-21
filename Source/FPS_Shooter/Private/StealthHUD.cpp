@@ -178,6 +178,53 @@ const TCHAR* StageCaption(EStealthMissionStage Stage)
 	default: return TEXT("ПРОНИКНОВЕНИЕ");
 	}
 }
+
+void DrawLaunchMenu(AStealthHUD& HUD, const AStealthPlayerController& Controller, const FStealthCanvas& UI)
+{
+	UI.Box(FLinearColor(0.008f, 0.014f, 0.02f, 0.82f), FVector2D::ZeroVector, UI.Size);
+	const FVector2D Center = UI.Size * 0.5;
+	const float PanelWidth = FMath::Min(500.0, UI.Size.X - 36.0);
+	const FVector2D PanelAt(Center.X - PanelWidth * 0.5, Center.Y - 260.0);
+	UI.Box(Panel, PanelAt, FVector2D(PanelWidth, 520));
+	UI.Box(Mint, PanelAt, FVector2D(3, 520));
+	UI.Text(TEXT("FPS / STEALTH"), PanelAt + FVector2D(30, 27), Mint, 1.2f, Bold);
+	UI.Text(TEXT("ИССЛЕДОВАТЕЛЬСКИЙ КОМПЛЕКС"), PanelAt + FVector2D(30, 59), Muted, 0.82f, Bold);
+	UI.Line(PanelAt + FVector2D(30, 91), PanelAt + FVector2D(PanelWidth - 30, 91), Track, 1.4f);
+	auto Button = [&](const TCHAR* Label, float Y, const FName Name, bool bPrimary = false)
+	{
+		const FVector2D At(PanelAt.X + 30, PanelAt.Y + Y);
+		const FVector2D Extent(PanelWidth - 60, 42);
+		UI.Box(bPrimary ? FLinearColor(0.09f, 0.26f, 0.23f, 0.96f) : Track, At, Extent);
+		UI.Box(bPrimary ? Mint : FLinearColor(0.22f, 0.33f, 0.35f), At, FVector2D(3, Extent.Y));
+		UI.Center(Label, At + Extent * 0.5, Ink, 0.96f, Bold);
+		HUD.AddHitBox(At * UI.Scale, Extent * UI.Scale, Name, true);
+	};
+	if (!Controller.IsSettingsMenuOpen())
+	{
+		UI.Text(TEXT("Войдите в комплекс и выполните задание."), PanelAt + FVector2D(30, 112), Muted, 0.86f);
+		Button(TEXT("НАЧАТЬ ИГРУ"), 158, TEXT("MenuPlay"), true);
+		Button(TEXT("НАСТРОЙКИ"), 218, TEXT("MenuSettings"));
+		UI.Center(TEXT("Esc — продолжить игру"), PanelAt + FVector2D(PanelWidth * 0.5f, 347), Muted, 0.72f);
+		return;
+	}
+	UI.Text(TEXT("НАСТРОЙКИ"), PanelAt + FVector2D(30, 112), Ink, 0.95f, Bold);
+	UI.Text(FString::Printf(TEXT("Обзор мыши     %.1f"), Controller.GetMouseSensitivity()),
+		PanelAt + FVector2D(30, 132), Ink, 0.82f);
+	Button(TEXT("−     УМЕНЬШИТЬ ОБЗОР"), 150, TEXT("MenuLookDown"));
+	Button(TEXT("+     УВЕЛИЧИТЬ ОБЗОР"), 197, TEXT("MenuLookUp"));
+	UI.Text(FString::Printf(TEXT("Чувствительность прицела     x%.1f"), Controller.GetAimSensitivityMultiplier()),
+		PanelAt + FVector2D(30, 246), Ink, 0.82f);
+	Button(TEXT("−     ПРИЦЕЛ"), 264, TEXT("MenuAimDown"));
+	Button(TEXT("+     ПРИЦЕЛ"), 311, TEXT("MenuAimUp"));
+	const TCHAR* QualityNames[] = { TEXT("НИЗКОЕ"), TEXT("СРЕДНЕЕ"), TEXT("ВЫСОКОЕ"), TEXT("ЭПИЧЕСКОЕ") };
+	UI.Text(TEXT("Качество графики"), PanelAt + FVector2D(30, 356), Ink, 0.82f);
+	const int32 Quality = FMath::Clamp(Controller.GetGraphicsQualityLevel(), 0, 3);
+	Button(FString::Printf(TEXT("%s  ·  ИЗМЕНИТЬ"), QualityNames[Quality]).GetCharArray().GetData(),
+		374, TEXT("MenuGraphics"));
+	Button(Controller.IsFullscreenEnabled() ? TEXT("ПОЛНОЭКРАННЫЙ РЕЖИМ: ВКЛ") : TEXT("ПОЛНОЭКРАННЫЙ РЕЖИМ: ВЫКЛ"),
+		421, TEXT("MenuFullscreen"));
+	Button(TEXT("НАЗАД"), 468, TEXT("MenuBack"));
+}
 }
 
 AStealthHUD::AStealthHUD()
@@ -195,15 +242,20 @@ void AStealthHUD::DrawHUD()
 	}
 
 	const AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>();
+	const FStealthCanvas UI(*this, *Canvas);
+	const AStealthPlayerController* Controller = Cast<AStealthPlayerController>(GetOwningPlayerController());
+	if (Controller && Controller->IsMainMenuOpen())
+	{
+		DrawLaunchMenu(*this, *Controller, UI);
+		return;
+	}
 	if (Mission && Mission->GetMissionState() != EStealthMissionState::Playing)
 	{
 		if (Mission->IsMissionResultReady()) { DrawMissionResult(*Mission); }
 		return;
 	}
 
-	const FStealthCanvas UI(*this, *Canvas);
 	const AStealthCharacter* Character = Cast<AStealthCharacter>(GetOwningPawn());
-	const AStealthPlayerController* Controller = Cast<AStealthPlayerController>(GetOwningPlayerController());
 	if (Mission && Character && Controller && Controller->IsMapOpen())
 	{
 		DrawTacticalMap(*Mission, *Character);
@@ -239,7 +291,7 @@ void AStealthHUD::DrawHUD()
 		{
 			UI.Text(TaskLines[Line], Objective + FVector2D(10, 20.0f + Line * LineHeight), Ink, 0.94f);
 		}
-		UI.Text(TEXT("[M] Карта   [F1] Чувствительность"), Objective + FVector2D(10, 21.0f + TaskLines.Num() * LineHeight), Muted, 0.76f);
+		UI.Text(TEXT("[M] Карта   [F2] Чувствительность   [Esc] Меню"), Objective + FVector2D(10, 21.0f + TaskLines.Num() * LineHeight), Muted, 0.76f);
 
 		const float Level = Mission->GetDetectionLevel();
 		if (Level > 0.015f || Stage == EStealthMissionStage::Evade)
@@ -260,7 +312,7 @@ void AStealthHUD::DrawHUD()
 		UI.Text(FString::Printf(TEXT("Обзор  %.1f   [-] / [+]"), Controller->GetMouseSensitivity()), PanelAt + FVector2D(16, 48), Ink);
 		UI.Text(FString::Printf(TEXT("Прицел  x%.1f   [[] / []]"), Controller->GetAimSensitivityMultiplier()), PanelAt + FVector2D(16, 74), Ink);
 		UI.Text(TEXT("Обычный обзор: 1.0. Коэффициент прицела умножает чувствительность обзора."), PanelAt + FVector2D(16, 103), Muted, 0.72f);
-		UI.Text(TEXT("F1 — закрыть. Значения сохраняются автоматически."), PanelAt + FVector2D(16, 124), Muted, 0.72f);
+		UI.Text(TEXT("F2 — закрыть. Значения сохраняются автоматически."), PanelAt + FVector2D(16, 124), Muted, 0.72f);
 	}
 
 	const FString AccessWarning = Character->GetAccessWarning().ToString();
@@ -576,6 +628,12 @@ void AStealthHUD::DrawMissionResult(const AStealthGameMode& Mission)
 void AStealthHUD::NotifyHitBoxClick(FName BoxName)
 {
 	Super::NotifyHitBoxClick(BoxName);
+	if (AStealthPlayerController* Controller = Cast<AStealthPlayerController>(GetOwningPlayerController());
+		Controller && BoxName.ToString().StartsWith(TEXT("Menu")))
+	{
+		Controller->HandleMenuButton(BoxName);
+		return;
+	}
 	if (BoxName == RestartHitBox)
 	{
 		if (AStealthPlayerController* PC = Cast<AStealthPlayerController>(GetOwningPlayerController()))

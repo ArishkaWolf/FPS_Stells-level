@@ -14,8 +14,13 @@ public:
 	void RestartMission();
 	bool IsMapOpen() const { return bMapOpen; }
 	bool IsSensitivityPanelOpen() const { return bSensitivityPanelOpen; }
+	bool IsMainMenuOpen() const { return bMainMenuOpen; }
+	bool IsSettingsMenuOpen() const { return bSettingsMenuOpen; }
 	float GetMouseSensitivity() const { return MouseSensitivity; }
 	float GetAimSensitivityMultiplier() const { return AimSensitivityMultiplier; }
+	int32 GetGraphicsQualityLevel() const;
+	bool IsFullscreenEnabled() const;
+	void HandleMenuButton(FName ButtonName);
 
 protected:
 	virtual void BeginPlay() override;
@@ -24,6 +29,8 @@ protected:
 private:
 	void ToggleMap();
 	void ToggleSensitivityPanel();
+	void ToggleMainMenu();
+	void StartMission();
 	void IncreaseMouseSensitivity();
 	void DecreaseMouseSensitivity();
 	void IncreaseAimSensitivity();
@@ -33,6 +40,8 @@ private:
 	void SaveSensitivitySettings() const;
 	bool bMapOpen = false;
 	bool bSensitivityPanelOpen = false;
+	bool bMainMenuOpen = false;
+	bool bSettingsMenuOpen = false;
 	float MouseSensitivity = 1.0f;
 	float AimSensitivityMultiplier = 0.7f;
 };
