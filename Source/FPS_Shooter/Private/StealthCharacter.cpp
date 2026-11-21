@@ -24,6 +24,7 @@
 #include "Particles/ParticleSystem.h"
 #include "SoundRayEmitterComponent.h"
 #include "StealthGameMode.h"
+#include "StealthPlayerController.h"
 #include "StealthDoor.h"
 #include "StealthArmsAnimInstance.h"
 #include "StealthInteractable.h"
@@ -350,8 +351,12 @@ void AStealthCharacter::Move(const FInputActionValue& Value)
 void AStealthCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector2D LookInput = Value.Get<FVector2D>();
-	AddControllerYawInput(LookInput.X);
-	AddControllerPitchInput(-LookInput.Y);
+	const AStealthPlayerController* PC = Cast<AStealthPlayerController>(GetController());
+	const float AimMultiplier = bIsAiming && PC ? PC->GetAimSensitivityMultiplier() : 1.0f;
+	const float Sensitivity = PC ? PC->GetMouseSensitivity() : 1.0f;
+	const float Scale = Sensitivity * FMath::Lerp(1.0f, AimMultiplier, AimAlpha);
+	AddControllerYawInput(LookInput.X * Scale);
+	AddControllerPitchInput(-LookInput.Y * Scale);
 }
 
 void AStealthCharacter::StartSprint()

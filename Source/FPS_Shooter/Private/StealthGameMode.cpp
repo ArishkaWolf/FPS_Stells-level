@@ -232,7 +232,7 @@ FString AStealthGameMode::GetObjectiveText() const
 	case EStealthMissionStep::RecoverKeycard:
 		return TEXT("Заберите пропуск у охранника архива");
 	case EStealthMissionStep::VerifyArchive:
-		return TEXT("Сверьте архив в закрытой аналитической");
+		return TEXT("Откройте запертую аналитическую и сверьте архив");
 	default:
 		return TEXT("Заберите данные в серверной");
 	}

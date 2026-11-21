@@ -87,6 +87,29 @@ struct FStealthCanvas
 		Text(Value, At - Measure(Value, FontScale, Typeface) * 0.5, Color, FontScale, Typeface);
 	}
 
+	TArray<FString> Wrap(const FString& Value, float MaxWidth, float FontScale, FName Typeface = Regular) const
+	{
+		TArray<FString> Lines;
+		FString Line;
+		TArray<FString> Words;
+		Value.ParseIntoArray(Words, TEXT(" "), true);
+		for (const FString& Word : Words)
+		{
+			const FString Candidate = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+			if (!Line.IsEmpty() && Measure(Candidate, FontScale, Typeface).X > MaxWidth)
+			{
+				Lines.Add(Line);
+				Line = Word;
+			}
+			else
+			{
+				Line = Candidate;
+			}
+		}
+		if (!Line.IsEmpty()) { Lines.Add(Line); }
+		return Lines;
+	}
+
 	void Bar(FVector2D At, FVector2D Extent, float Fraction, const FLinearColor& Color) const
 	{
 		Box(Track, At, Extent);
@@ -204,12 +227,19 @@ void AStealthHUD::DrawHUD()
 		const FString Caption = Mission->HasExtendedObjectives()
 			? FString::Printf(TEXT("ЭТАП %d/5  •  %s"), 1 + int32(Mission->GetMissionStep()), StageCaption(Stage))
 			: StageCaption(Stage);
-		const float Width = FMath::Max3(163.0, UI.Measure(Task, 0.94f).X + 28.0, UI.Measure(Caption, 0.76f, Bold).X + 28.0);
-		UI.Box(Backdrop, Objective, FVector2D(Width, 58));
-		UI.Box(StageColor, Objective, FVector2D(2, 37));
+		const float Width = FMath::Min(static_cast<float>(UI.Size.X - 2.0 * Margin),
+			FMath::Max3(220.0f, static_cast<float>(UI.Measure(Caption, 0.76f, Bold).X + 28.0), 525.0f));
+		const TArray<FString> TaskLines = UI.Wrap(Task, Width - 20.0f, 0.94f);
+		const float LineHeight = 17.0f;
+		const float PanelHeight = 21.0f + TaskLines.Num() * LineHeight + 21.0f;
+		UI.Box(Backdrop, Objective, FVector2D(Width, PanelHeight));
+		UI.Box(StageColor, Objective, FVector2D(2, PanelHeight));
 		UI.Text(Caption, Objective + FVector2D(10, 4), StageColor, 0.76f, Bold);
-		UI.Text(Task, Objective + FVector2D(10, 19), Ink, 0.94f);
-		UI.Text(TEXT("[M] Карта"), Objective + FVector2D(10, 38), Muted, 0.76f);
+		for (int32 Line = 0; Line < TaskLines.Num(); ++Line)
+		{
+			UI.Text(TaskLines[Line], Objective + FVector2D(10, 20.0f + Line * LineHeight), Ink, 0.94f);
+		}
+		UI.Text(TEXT("[M] Карта   [F1] Чувствительность"), Objective + FVector2D(10, 21.0f + TaskLines.Num() * LineHeight), Muted, 0.76f);
 
 		const float Level = Mission->GetDetectionLevel();
 		if (Level > 0.015f || Stage == EStealthMissionStage::Evade)
@@ -221,6 +251,17 @@ void AStealthHUD::DrawHUD()
 	}
 
 	if (!Character) { return; }
+
+	if (Controller && Controller->IsSensitivityPanelOpen())
+	{
+		const FVector2D PanelAt(UI.Size.X * 0.5f - 190.0f, UI.Size.Y * 0.5f - 75.0f);
+		UI.Box(Backdrop, PanelAt, FVector2D(380, 150));
+		UI.Text(TEXT("ЧУВСТВИТЕЛЬНОСТЬ МЫШИ"), PanelAt + FVector2D(16, 14), Mint, 0.92f, Bold);
+		UI.Text(FString::Printf(TEXT("Обзор  %.1f   [-] / [+]"), Controller->GetMouseSensitivity()), PanelAt + FVector2D(16, 48), Ink);
+		UI.Text(FString::Printf(TEXT("Прицел  x%.1f   [[] / []]"), Controller->GetAimSensitivityMultiplier()), PanelAt + FVector2D(16, 74), Ink);
+		UI.Text(TEXT("Обычный обзор: 1.0. Коэффициент прицела умножает чувствительность обзора."), PanelAt + FVector2D(16, 103), Muted, 0.72f);
+		UI.Text(TEXT("F1 — закрыть. Значения сохраняются автоматически."), PanelAt + FVector2D(16, 124), Muted, 0.72f);
+	}
 
 	const FString AccessWarning = Character->GetAccessWarning().ToString();
 	const FString Interaction = Character->GetInteractionPrompt().ToString();
