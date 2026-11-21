@@ -12,6 +12,7 @@
 void AStealthPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+	PrimaryActorTick.bTickEvenWhenPaused = true;
 	ResetIgnoreMoveInput();
 	ResetIgnoreLookInput();
 	GConfig->GetFloat(TEXT("Mouse"), TEXT("Sensitivity"), MouseSensitivity, GGameUserSettingsIni);
@@ -64,6 +65,10 @@ void AStealthPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::F2, IE_Pressed, this, &AStealthPlayerController::ToggleSensitivityPanel);
 	FInputKeyBinding& EscapeBinding = InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AStealthPlayerController::ToggleMainMenu);
 	EscapeBinding.bExecuteWhenPaused = true;
+	FInputKeyBinding& SliderPressBinding = InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AStealthPlayerController::BeginSensitivitySliderDrag);
+	SliderPressBinding.bExecuteWhenPaused = true;
+	FInputKeyBinding& SliderReleaseBinding = InputComponent->BindKey(EKeys::LeftMouseButton, IE_Released, this, &AStealthPlayerController::EndSensitivitySliderDrag);
+	SliderReleaseBinding.bExecuteWhenPaused = true;
 	InputComponent->BindKey(EKeys::Add, IE_Pressed, this, &AStealthPlayerController::IncreaseMouseSensitivity);
 	InputComponent->BindKey(EKeys::Equals, IE_Pressed, this, &AStealthPlayerController::IncreaseMouseSensitivity);
 	InputComponent->BindKey(EKeys::Subtract, IE_Pressed, this, &AStealthPlayerController::DecreaseMouseSensitivity);
@@ -72,16 +77,20 @@ void AStealthPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::LeftBracket, IE_Pressed, this, &AStealthPlayerController::DecreaseAimSensitivity);
 }
 
+void AStealthPlayerController::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (bDraggingSensitivitySlider || bDraggingAimSensitivitySlider)
+	{
+		if (IsInputKeyDown(EKeys::LeftMouseButton)) { UpdateSensitivitySliderFromMouse(); }
+		else { EndSensitivitySliderDrag(); }
+	}
+}
+
 bool AStealthPlayerController::IsFullscreenEnabled() const
 {
 	const UGameUserSettings* Settings = GEngine ? GEngine->GetGameUserSettings() : nullptr;
 	return Settings && Settings->GetFullscreenMode() != EWindowMode::Windowed;
-}
-
-int32 AStealthPlayerController::GetGraphicsQualityLevel() const
-{
-	const UGameUserSettings* Settings = GEngine ? GEngine->GetGameUserSettings() : nullptr;
-	return Settings ? Settings->GetOverallScalabilityLevel() : 3;
 }
 
 void AStealthPlayerController::StartMission()
@@ -129,15 +138,6 @@ void AStealthPlayerController::HandleMenuButton(FName ButtonName)
 	else if (ButtonName == TEXT("MenuLookUp")) { MouseSensitivity = FMath::Clamp(MouseSensitivity + 0.1f, 0.1f, 3.0f); SaveSensitivitySettings(); }
 	else if (ButtonName == TEXT("MenuAimDown")) { AimSensitivityMultiplier = FMath::Clamp(AimSensitivityMultiplier - 0.1f, 0.2f, 1.5f); SaveSensitivitySettings(); }
 	else if (ButtonName == TEXT("MenuAimUp")) { AimSensitivityMultiplier = FMath::Clamp(AimSensitivityMultiplier + 0.1f, 0.2f, 1.5f); SaveSensitivitySettings(); }
-	else if (ButtonName == TEXT("MenuGraphics"))
-	{
-		if (UGameUserSettings* Settings = GEngine ? GEngine->GetGameUserSettings() : nullptr)
-		{
-			Settings->SetOverallScalabilityLevel((Settings->GetOverallScalabilityLevel() + 1) % 4);
-			Settings->ApplySettings(false);
-			Settings->SaveSettings();
-		}
-	}
 	else if (ButtonName == TEXT("MenuFullscreen"))
 	{
 		if (UGameUserSettings* Settings = GEngine ? GEngine->GetGameUserSettings() : nullptr)
@@ -147,6 +147,60 @@ void AStealthPlayerController::HandleMenuButton(FName ButtonName)
 			Settings->SaveSettings();
 		}
 	}
+}
+
+void AStealthPlayerController::BeginSensitivitySliderDrag()
+{
+	if (!bMainMenuOpen || !bSettingsMenuOpen) { return; }
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	int32 ViewX = 0;
+	int32 ViewY = 0;
+	if (!GetMousePosition(MouseX, MouseY)) { return; }
+	GetViewportSize(ViewX, ViewY);
+	if (ViewX <= 0 || ViewY <= 0) { return; }
+	const float Scale = FMath::Min(ViewX / 960.0f, ViewY / 540.0f);
+	const FVector2D LogicalSize(ViewX / Scale, ViewY / Scale);
+	const float PanelTop = (LogicalSize.Y - 470.0f) * 0.5f;
+	const float LogicalY = MouseY / Scale;
+	if (LogicalY >= PanelTop + 164.0f && LogicalY <= PanelTop + 204.0f)
+	{
+		bDraggingSensitivitySlider = true;
+		bDraggingAimSensitivitySlider = false;
+		UpdateSensitivitySliderFromMouse();
+	}
+	else if (LogicalY >= PanelTop + 266.0f && LogicalY <= PanelTop + 306.0f)
+	{
+		bDraggingSensitivitySlider = false;
+		bDraggingAimSensitivitySlider = true;
+		UpdateSensitivitySliderFromMouse();
+	}
+}
+
+void AStealthPlayerController::EndSensitivitySliderDrag()
+{
+	if (bDraggingSensitivitySlider || bDraggingAimSensitivitySlider) { SaveSensitivitySettings(); }
+	bDraggingSensitivitySlider = false;
+	bDraggingAimSensitivitySlider = false;
+}
+
+void AStealthPlayerController::UpdateSensitivitySliderFromMouse()
+{
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	int32 ViewX = 0;
+	int32 ViewY = 0;
+	if (!GetMousePosition(MouseX, MouseY)) { return; }
+	GetViewportSize(ViewX, ViewY);
+	if (ViewX <= 0 || ViewY <= 0) { return; }
+	const float Scale = FMath::Min(ViewX / 960.0f, ViewY / 540.0f);
+	const float LogicalWidth = ViewX / Scale;
+	const float PanelWidth = FMath::Min(900.0f, LogicalWidth - 48.0f);
+	const float TrackStart = (LogicalWidth - PanelWidth) * 0.5f + 30.0f;
+	const float TrackWidth = PanelWidth - 60.0f;
+	const float Fraction = FMath::Clamp((MouseX / Scale - TrackStart) / TrackWidth, 0.0f, 1.0f);
+	if (bDraggingSensitivitySlider) { MouseSensitivity = FMath::Lerp(0.1f, 3.0f, Fraction); }
+	if (bDraggingAimSensitivitySlider) { AimSensitivityMultiplier = FMath::Lerp(0.2f, 1.5f, Fraction); }
 }
 
 void AStealthPlayerController::ToggleSensitivityPanel()

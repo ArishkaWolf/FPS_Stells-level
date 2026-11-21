@@ -183,6 +183,49 @@ void DrawLaunchMenu(AStealthHUD& HUD, const AStealthPlayerController& Controller
 {
 	UI.Box(FLinearColor(0.008f, 0.014f, 0.02f, 0.82f), FVector2D::ZeroVector, UI.Size);
 	const FVector2D Center = UI.Size * 0.5;
+	if (Controller.IsSettingsMenuOpen())
+	{
+		const float SettingsWidth = FMath::Min(900.0f, UI.Size.X - 48.0f);
+		const FVector2D SettingsAt(Center.X - SettingsWidth * 0.5f, Center.Y - 235.0f);
+		UI.Box(Panel, SettingsAt, FVector2D(SettingsWidth, 470));
+		UI.Box(Mint, SettingsAt, FVector2D(3, 470));
+		UI.Text(TEXT("FPS / STEALTH"), SettingsAt + FVector2D(30, 24), Mint, 1.15f, Bold);
+		UI.Text(TEXT("ИССЛЕДОВАТЕЛЬСКИЙ КОМПЛЕКС"), SettingsAt + FVector2D(30, 55), Muted, 0.8f, Bold);
+		UI.Line(SettingsAt + FVector2D(30, 87), SettingsAt + FVector2D(SettingsWidth - 30, 87), Track, 1.4f);
+		UI.Text(TEXT("НАСТРОЙКИ"), SettingsAt + FVector2D(30, 108), Ink, 0.95f, Bold);
+
+		auto Slider = [&](const TCHAR* Label, float Value, float Minimum, float Maximum, float RowY)
+		{
+			UI.Text(Label, SettingsAt + FVector2D(30, RowY), Ink, 0.88f, Bold);
+			UI.Right(FString::Printf(TEXT("%.1f"), Value), SettingsAt + FVector2D(SettingsWidth - 30, RowY), Mint, 0.9f, Bold);
+			const FVector2D TrackAt(SettingsAt.X + 30, SettingsAt.Y + RowY + 34);
+			const FVector2D TrackSize(SettingsWidth - 60, 8);
+			const float Fraction = FMath::Clamp((Value - Minimum) / (Maximum - Minimum), 0.0f, 1.0f);
+			UI.Box(Track, TrackAt, TrackSize);
+			UI.Box(Mint, TrackAt, FVector2D(TrackSize.X * Fraction, TrackSize.Y));
+			const FVector2D Knob(TrackAt.X + TrackSize.X * Fraction - 6, TrackAt.Y - 8);
+			UI.Box(Ink, Knob, FVector2D(12, 24));
+		};
+		Slider(TEXT("ЧУВСТВИТЕЛЬНОСТЬ"), Controller.GetMouseSensitivity(), 0.1f, 3.0f, 135);
+		Slider(TEXT("ЧУВСТВИТЕЛЬНОСТЬ ПРИЦЕЛА"), Controller.GetAimSensitivityMultiplier(), 0.2f, 1.5f, 237);
+
+		const float ButtonY = SettingsAt.Y + 354;
+		const float ButtonGap = 14.0f;
+		const float ButtonWidth = (SettingsWidth - 60.0f - ButtonGap) * 0.5f;
+		auto SettingsButton = [&](const TCHAR* Label, float X, FName Name)
+		{
+			const FVector2D At(X, ButtonY);
+			const FVector2D Extent(ButtonWidth, 48);
+			UI.Box(Track, At, Extent);
+			UI.Box(FLinearColor(0.22f, 0.33f, 0.35f), At, FVector2D(3, Extent.Y));
+			UI.Center(Label, At + Extent * 0.5, Ink, 0.84f, Bold);
+			HUD.AddHitBox(At * UI.Scale, Extent * UI.Scale, Name, true);
+		};
+		SettingsButton(Controller.IsFullscreenEnabled() ? TEXT("ПОЛНЫЙ ЭКРАН: ВКЛ") : TEXT("ПОЛНЫЙ ЭКРАН: ВЫКЛ"),
+			SettingsAt.X + 30, TEXT("MenuFullscreen"));
+		SettingsButton(TEXT("НАЗАД"), SettingsAt.X + 30 + ButtonWidth + ButtonGap, TEXT("MenuBack"));
+		return;
+	}
 	const float PanelWidth = FMath::Min(500.0, UI.Size.X - 36.0);
 	const FVector2D PanelAt(Center.X - PanelWidth * 0.5, Center.Y - 260.0);
 	UI.Box(Panel, PanelAt, FVector2D(PanelWidth, 520));
@@ -199,31 +242,10 @@ void DrawLaunchMenu(AStealthHUD& HUD, const AStealthPlayerController& Controller
 		UI.Center(Label, At + Extent * 0.5, Ink, 0.96f, Bold);
 		HUD.AddHitBox(At * UI.Scale, Extent * UI.Scale, Name, true);
 	};
-	if (!Controller.IsSettingsMenuOpen())
-	{
-		UI.Text(TEXT("Войдите в комплекс и выполните задание."), PanelAt + FVector2D(30, 112), Muted, 0.86f);
-		Button(TEXT("НАЧАТЬ ИГРУ"), 158, TEXT("MenuPlay"), true);
-		Button(TEXT("НАСТРОЙКИ"), 218, TEXT("MenuSettings"));
-		UI.Center(TEXT("Esc — продолжить игру"), PanelAt + FVector2D(PanelWidth * 0.5f, 347), Muted, 0.72f);
-		return;
-	}
-	UI.Text(TEXT("НАСТРОЙКИ"), PanelAt + FVector2D(30, 112), Ink, 0.95f, Bold);
-	UI.Text(FString::Printf(TEXT("Обзор мыши     %.1f"), Controller.GetMouseSensitivity()),
-		PanelAt + FVector2D(30, 132), Ink, 0.82f);
-	Button(TEXT("−     УМЕНЬШИТЬ ОБЗОР"), 150, TEXT("MenuLookDown"));
-	Button(TEXT("+     УВЕЛИЧИТЬ ОБЗОР"), 197, TEXT("MenuLookUp"));
-	UI.Text(FString::Printf(TEXT("Чувствительность прицела     x%.1f"), Controller.GetAimSensitivityMultiplier()),
-		PanelAt + FVector2D(30, 246), Ink, 0.82f);
-	Button(TEXT("−     ПРИЦЕЛ"), 264, TEXT("MenuAimDown"));
-	Button(TEXT("+     ПРИЦЕЛ"), 311, TEXT("MenuAimUp"));
-	const TCHAR* QualityNames[] = { TEXT("НИЗКОЕ"), TEXT("СРЕДНЕЕ"), TEXT("ВЫСОКОЕ"), TEXT("ЭПИЧЕСКОЕ") };
-	UI.Text(TEXT("Качество графики"), PanelAt + FVector2D(30, 356), Ink, 0.82f);
-	const int32 Quality = FMath::Clamp(Controller.GetGraphicsQualityLevel(), 0, 3);
-	Button(FString::Printf(TEXT("%s  ·  ИЗМЕНИТЬ"), QualityNames[Quality]).GetCharArray().GetData(),
-		374, TEXT("MenuGraphics"));
-	Button(Controller.IsFullscreenEnabled() ? TEXT("ПОЛНОЭКРАННЫЙ РЕЖИМ: ВКЛ") : TEXT("ПОЛНОЭКРАННЫЙ РЕЖИМ: ВЫКЛ"),
-		421, TEXT("MenuFullscreen"));
-	Button(TEXT("НАЗАД"), 468, TEXT("MenuBack"));
+	UI.Text(TEXT("Войдите в комплекс и выполните задание."), PanelAt + FVector2D(30, 112), Muted, 0.86f);
+	Button(TEXT("НАЧАТЬ ИГРУ"), 158, TEXT("MenuPlay"), true);
+	Button(TEXT("НАСТРОЙКИ"), 218, TEXT("MenuSettings"));
+	UI.Center(TEXT("Esc — продолжить игру"), PanelAt + FVector2D(PanelWidth * 0.5f, 347), Muted, 0.72f);
 }
 }
 
@@ -309,8 +331,8 @@ void AStealthHUD::DrawHUD()
 		const FVector2D PanelAt(UI.Size.X * 0.5f - 190.0f, UI.Size.Y * 0.5f - 75.0f);
 		UI.Box(Backdrop, PanelAt, FVector2D(380, 150));
 		UI.Text(TEXT("ЧУВСТВИТЕЛЬНОСТЬ МЫШИ"), PanelAt + FVector2D(16, 14), Mint, 0.92f, Bold);
-		UI.Text(FString::Printf(TEXT("Обзор  %.1f   [-] / [+]"), Controller->GetMouseSensitivity()), PanelAt + FVector2D(16, 48), Ink);
-		UI.Text(FString::Printf(TEXT("Прицел  x%.1f   [[] / []]"), Controller->GetAimSensitivityMultiplier()), PanelAt + FVector2D(16, 74), Ink);
+		UI.Text(FString::Printf(TEXT("Чувствительность  %.1f   [-] / [+]"), Controller->GetMouseSensitivity()), PanelAt + FVector2D(16, 48), Ink);
+	UI.Text(FString::Printf(TEXT("Чувствительность прицела  x%.1f   [[] / []]"), Controller->GetAimSensitivityMultiplier()), PanelAt + FVector2D(16, 74), Ink);
 		UI.Text(TEXT("Обычный обзор: 1.0. Коэффициент прицела умножает чувствительность обзора."), PanelAt + FVector2D(16, 103), Muted, 0.72f);
 		UI.Text(TEXT("F2 — закрыть. Значения сохраняются автоматически."), PanelAt + FVector2D(16, 124), Muted, 0.72f);
 	}
