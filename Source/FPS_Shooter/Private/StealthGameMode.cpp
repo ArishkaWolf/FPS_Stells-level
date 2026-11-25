@@ -56,6 +56,16 @@ AStealthLaboratoryGameMode::AStealthLaboratoryGameMode()
 void AStealthLaboratoryGameMode::StartPlay()
 {
 	Super::StartPlay();
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		AActor* Actor = *It;
+		const FString Label = Actor->GetActorNameOrLabel();
+		if (Label.Contains(TEXT("StorageBox"), ESearchCase::IgnoreCase)
+			|| Label.Contains(TEXT("Locker"), ESearchCase::IgnoreCase))
+		{
+			Actor->Tags.AddUnique(TEXT("Mission.HidingSpot"));
+		}
+	}
 	for (TActorIterator<ASoundHearingNPC> It(GetWorld()); It; ++It)
 	{
 		if (It->ActorHasTag(TEXT("Mission.InitialGuard"))) { InitialGuards.Add(*It); }

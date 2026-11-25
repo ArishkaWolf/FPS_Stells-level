@@ -7,6 +7,7 @@ TArray<TWeakObjectPtr<UNPCHearingComponent>> UNPCHearingComponent::RegisteredCom
 UNPCHearingComponent::UNPCHearingComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.TickInterval = 0.1f;
 	bAutoActivate = true;
 	TypePriorityWeights = { { ESoundEventType::Footstep, 1.0f }, { ESoundEventType::Landing, 1.25f },
 		{ ESoundEventType::Gunshot, 3.0f }, { ESoundEventType::ThrownObject, 1.5f },

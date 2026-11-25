@@ -31,6 +31,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Stealth AI")
 	EStealthAIState GetAIState() const { return AIState; }
+	bool IsPlayerVisible() const { return bPlayerVisible; }
 
 	UFUNCTION(BlueprintPure, Category="Stealth AI")
 	float GetDetectionLevel() const { return DetectionLevel; }

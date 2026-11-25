@@ -34,6 +34,13 @@
 
 namespace
 {
+	const FName HidingSpotTag(TEXT("Mission.HidingSpot"));
+
+	bool IsHidingSpot(const AActor* Actor)
+	{
+		return Actor && Actor->ActorHasTag(HidingSpotTag);
+	}
+
 	void AddNegatedModifier(UInputMappingContext* Context, FEnhancedActionKeyMapping& Mapping)
 	{
 		Mapping.Modifiers.Add(NewObject<UInputModifierNegate>(Context));
@@ -105,12 +112,12 @@ AStealthCharacter::AStealthCharacter()
 
 	SoundEmitter = CreateDefaultSubobject<USoundRayEmitterComponent>(TEXT("SoundEmitter"));
 	SoundEmitter->Volume = WalkFootstepVolume;
-	SoundEmitter->RayCount = 16;
+	SoundEmitter->RayCount = 8;
 	SoundEmitter->RayPitchDegrees = -4.0f;
 	SoundEmitter->AttenuationPerMeter = 0.06f;
 	SoundEmitter->WallAbsorption = 0.65f;
 	SoundEmitter->MaxDistance = WalkFootstepDistance;
-	SoundEmitter->MaxReflections = 2;
+	SoundEmitter->MaxReflections = 1;
 	SoundEmitter->FootstepInterval = 0.48f;
 	SoundEmitter->MinSpeedForFootsteps = 25.0f;
 	SoundEmitter->bDrawDebug = false;
@@ -272,7 +279,7 @@ void AStealthCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 void AStealthCharacter::AddNoiseMakers(int32 Amount)
 {
-	NoiseMakerCount = FMath::Max(0, NoiseMakerCount + Amount);
+	NoiseMakerCount = FMath::Clamp(NoiseMakerCount + Amount, 0, 5);
 }
 
 void AStealthCharacter::CreateInputMapping()
@@ -383,12 +390,22 @@ void AStealthCharacter::ToggleCrouch()
 
 void AStealthCharacter::Interact()
 {
+	if (bIsHiding)
+	{
+		ExitHidingSpot();
+		return;
+	}
 	if (!CanPerformMissionAction() || IsHealing())
 	{
 		return;
 	}
 	if (AActor* Target = FindInteractionTarget())
 	{
+		if (IsHidingSpot(Target))
+		{
+			EnterHidingSpot(Target);
+			return;
+		}
 		if (const AStealthDoor* Door = Cast<AStealthDoor>(Target); Door && Door->IsAccessDenied()) { return; }
 		if (!Target->IsA<AStealthSupplyPickup>()) { CancelReload(); }
 		IStealthInteractable::Execute_Interact(Target, this);
@@ -407,10 +424,18 @@ FText AStealthCharacter::GetAccessWarning() const
 
 FText AStealthCharacter::GetInteractionPrompt() const
 {
+	if (bIsHiding)
+	{
+		return NSLOCTEXT("StealthUI", "ExitHidingSpot", "Нажмите E, чтобы выйти из укрытия");
+	}
 	AActor* Target = CanPerformMissionAction() && !IsHealing() ? FindInteractionTarget() : nullptr;
 	if (const AStealthSupplyPickup* Supply = Cast<AStealthSupplyPickup>(Target))
 	{
 		return Supply->GetPromptFor(*this);
+	}
+	if (IsHidingSpot(Target))
+	{
+		return NSLOCTEXT("StealthUI", "EnterHidingSpot", "Спрятаться в шкафу");
 	}
 	return Target ? IStealthInteractable::Execute_GetInteractionPrompt(Target) : FText::GetEmpty();
 }
@@ -424,11 +449,44 @@ AActor* AStealthCharacter::FindInteractionTarget() const
 
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, QueryParams)
 		&& Hit.GetActor()
-		&& Hit.GetActor()->Implements<UStealthInteractable>())
+		&& (Hit.GetActor()->Implements<UStealthInteractable>() || IsHidingSpot(Hit.GetActor())))
 	{
 		return Hit.GetActor();
 	}
 	return nullptr;
+}
+
+void AStealthCharacter::EnterHidingSpot(AActor* HidingSpot)
+{
+	if (!HidingSpot || bIsHiding || !CanPerformMissionAction()) { return; }
+	FVector BoundsOrigin;
+	FVector BoundsExtent;
+	HidingSpot->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+	FVector ToPlayer = (GetActorLocation() - BoundsOrigin).GetSafeNormal2D();
+	if (ToPlayer.IsNearlyZero()) { ToPlayer = -HidingSpot->GetActorForwardVector().GetSafeNormal2D(); }
+	const float FrontOffset = FMath::Abs(ToPlayer.X) * BoundsExtent.X
+		+ FMath::Abs(ToPlayer.Y) * BoundsExtent.Y + GetCapsuleComponent()->GetScaledCapsuleRadius() + 8.0f;
+	SetActorLocation(FVector(BoundsOrigin.X + ToPlayer.X * FrontOffset,
+		BoundsOrigin.Y + ToPlayer.Y * FrontOffset, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+	ReleaseHeldActions();
+	CancelReload();
+	CancelHealing();
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FirstPersonArms->SetHiddenInGame(true, true);
+	bIsHiding = true;
+	CurrentHidingSpot = HidingSpot;
+}
+
+void AStealthCharacter::ExitHidingSpot()
+{
+	if (!bIsHiding) { return; }
+	bIsHiding = false;
+	CurrentHidingSpot.Reset();
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	FirstPersonArms->SetHiddenInGame(false, true);
 }
 
 void AStealthCharacter::ThrowNoiseMaker()
@@ -588,6 +646,7 @@ void AStealthCharacter::UpdateDeathPose(float DeltaSeconds)
 
 bool AStealthCharacter::CanPerformMissionAction() const
 {
+	if (bIsHiding) { return false; }
 	const AStealthGameMode* GameMode = GetWorld() ? GetWorld()->GetAuthGameMode<AStealthGameMode>() : nullptr;
 	return CurrentHealth > 0.0f && (!GameMode ||
 		(GameMode->GetMissionState() == EStealthMissionState::Playing && !GameMode->IsActorProtected(this)));

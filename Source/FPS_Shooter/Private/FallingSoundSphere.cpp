@@ -7,11 +7,12 @@
 #include "Materials/MaterialInterface.h"
 #include "Sound/SoundBase.h"
 #include "SoundRayEmitterComponent.h"
+#include "StealthCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
 static TAutoConsoleVariable<int32> CVarFallingSphereRayCount(
 	TEXT("SoundRayDemo.RayCount"),
-	16,
+	8,
 	TEXT("Number of sound rays emitted by the falling demo sphere."));
 
 AFallingSoundSphere::AFallingSoundSphere()
@@ -46,15 +47,29 @@ AFallingSoundSphere::AFallingSoundSphere()
 	SoundEmitter->bAutoEmitFootsteps = false;
 	SoundEmitter->bDirectionalSound = false;
 	SoundEmitter->Volume = 1.15f;
-	SoundEmitter->RayCount = 16;
+	SoundEmitter->RayCount = 8;
 	SoundEmitter->AttenuationPerMeter = 0.04f;
 	SoundEmitter->WallAbsorption = 0.35f;
 	SoundEmitter->RayPitchDegrees = 0.0f;
 	SoundEmitter->ForgetSpeed = 1.0f / 60.0f;
 	SoundEmitter->MaxDistance = 2200.0f;
-	SoundEmitter->MaxReflections = 4;
-	SoundEmitter->bDrawDebug = true;
+	SoundEmitter->MaxReflections = 2;
+	SoundEmitter->bDrawDebug = false;
 	SoundEmitter->DebugDrawDuration = 60.0f;
+}
+
+void AFallingSoundSphere::Interact_Implementation(AStealthCharacter* InteractingCharacter)
+{
+	if (!bEmittedSound || !InteractingCharacter) { return; }
+	InteractingCharacter->AddNoiseMakers(1);
+	Destroy();
+}
+
+FText AFallingSoundSphere::GetInteractionPrompt_Implementation() const
+{
+	return bEmittedSound
+		? NSLOCTEXT("StealthUI", "RecoverNoiseMaker", "Подобрать приманку")
+		: FText::GetEmpty();
 }
 
 void AFallingSoundSphere::BeginPlay()

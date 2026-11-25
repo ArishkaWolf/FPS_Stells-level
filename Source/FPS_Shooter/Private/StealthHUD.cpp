@@ -593,7 +593,7 @@ void AStealthHUD::DrawGuardIndicators()
 	{
 		const ASoundHearingNPC& Guard = **It;
 		const auto* AI = Cast<AStealthAIController>(Guard.GetController());
-		if (!AI || Guard.IsDead()) { continue; }
+		if (!AI || Guard.IsDead() || !AI->IsPlayerVisible()) { continue; }
 
 		const TCHAR* Icon;
 		FLinearColor Color;
@@ -622,10 +622,6 @@ void AStealthHUD::DrawGuardIndicators()
 		{
 			continue;
 		}
-
-		FCollisionQueryParams Sight(SCENE_QUERY_STAT(StealthGuardIndicator), false, GetOwningPawn());
-		Sight.AddIgnoredActor(&Guard);
-		if (GetWorld()->LineTraceTestByChannel(Eye, Head, ECC_Visibility, Sight)) { continue; }
 
 		UI.Box(Panel, At, FVector2D(Width, 22));
 		UI.Box(Color, At + FVector2D(3, 3), FVector2D(20, 16));

@@ -29,6 +29,14 @@ void USoundRayEmitterComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	TimeUntilNextFootstep = FootstepInterval;
+	if (bAutoEmitFootsteps)
+	{
+		PrimaryComponentTick.TickInterval = 0.05f;
+	}
+	else
+	{
+		SetComponentTickEnabled(false);
+	}
 }
 
 void USoundRayEmitterComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

@@ -59,6 +59,8 @@ public:
 	float GetHitConfirmAlpha() const { return HitConfirmSeconds / HitConfirmDuration; }
 	static constexpr float DeathPresentationDuration = 0.45f;
 	FText GetInteractionPrompt() const;
+	UFUNCTION(BlueprintPure, Category="Stealth")
+	bool IsHiding() const { return bIsHiding; }
 	void StopMissionActions();
 	void ReleaseHeldActions();
 	bool CanPerformMissionAction() const;
@@ -323,6 +325,8 @@ private:
 	float DeathElapsed = 0.0f;
 	FRotator DeathCameraStart;
 	FVector DeathArmsStart;
+	bool bIsHiding = false;
+	TWeakObjectPtr<AActor> CurrentHidingSpot;
 
 	void CreateInputMapping();
 	void ApplyInputMapping();
@@ -332,6 +336,8 @@ private:
 	void StopSprint();
 	void ToggleCrouch();
 	void Interact();
+	void EnterHidingSpot(AActor* HidingSpot);
+	void ExitHidingSpot();
 	AActor* FindInteractionTarget() const;
 	void ThrowNoiseMaker();
 	void StartFire();

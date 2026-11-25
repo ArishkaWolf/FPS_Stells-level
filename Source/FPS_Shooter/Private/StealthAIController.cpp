@@ -17,6 +17,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogStealthAI, Log, All);
 AStealthAIController::AStealthAIController()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.05f;
 	bSetControlRotationFromPawnOrientation = false;
 }
 
@@ -132,7 +133,17 @@ void AStealthAIController::UpdateHearing(float DeltaSeconds)
 	if (Source && Source->IsA<ASoundHearingNPC>()) { return; }
 	if (const AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>();
 		Mission && Mission->IsActorProtected(Source)) { return; }
-	if (AIState == EStealthAIState::Chase || bPlayerVisible || Sound.Age > 4.0f) { return; }
+	if (bPlayerVisible || Sound.Age > 4.0f) { return; }
+	if (Sound.Event.Type == ESoundEventType::ThrownObject && AIState == EStealthAIState::Chase)
+	{
+		// A thrown decoy can break pursuit once the player has left sight.
+		bSearchingForPlayer = false;
+		bHasSoundFocus = true;
+		SoundFocus = Sound;
+		SetAIState(EStealthAIState::Investigate, Sound.Location);
+		return;
+	}
+	if (AIState == EStealthAIState::Chase) { return; }
 	const float Priority = Hearing->GetSoundPriority(Sound);
 	if (Priority < SuspiciousSoundThreshold) { return; }
 	if (bHasSoundFocus && AIState != EStealthAIState::Patrol)
@@ -332,9 +343,9 @@ void AStealthAIController::BuildSearchPoints()
 		if (!Navigation->ProjectPointToNavigation(Candidate, Projected, FVector(160, 160, 250))) { continue; }
 		if (SearchPoints.ContainsByPredicate([&](const FVector& Point)
 			{ return FVector::DistSquared2D(Point, Projected.Location) < FMath::Square(140.0f); })) { continue; }
-		UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(),
-			ControlledNPC->GetActorLocation(), Projected.Location, ControlledNPC.Get());
-		if (Path && Path->IsValid() && !Path->IsPartial()) { SearchPoints.Add(Projected.Location); }
+		// MoveToLocation performs path following asynchronously; synchronous path construction here
+		// multiplied navigation cost when several guards began searching together.
+		SearchPoints.Add(Projected.Location);
 	}
 	if (SearchPoints.IsEmpty()) { SearchPoints.Add(ControlledNPC->GetActorLocation()); }
 }
@@ -437,7 +448,8 @@ void AStealthAIController::StopForDeath()
 int32 AStealthAIController::GetVisiblePlayerSamples(FVector& OutPlayerLocation) const
 {
 	if (!ControlledNPC.IsValid() || ControlledNPC->IsDead() || !PlayerPawn.IsValid() || !GetWorld()) { return 0; }
-	if (const AStealthCharacter* Player = Cast<AStealthCharacter>(PlayerPawn.Get()); Player && Player->GetHealth() <= 0.0f) { return 0; }
+	if (const AStealthCharacter* Player = Cast<AStealthCharacter>(PlayerPawn.Get());
+		Player && (Player->GetHealth() <= 0.0f || Player->IsHiding())) { return 0; }
 	if (const AStealthGameMode* Mission = GetWorld()->GetAuthGameMode<AStealthGameMode>();
 		Mission && Mission->IsActorProtected(PlayerPawn.Get())) { return 0; }
 	const FVector Eye = ControlledNPC->GetActorLocation() + FVector(0, 0, 70);
@@ -450,7 +462,7 @@ int32 AStealthAIController::GetVisiblePlayerSamples(FVector& OutPlayerLocation) 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(StealthSight), true, ControlledNPC.Get());
 	const float HalfHeight = PlayerPawn->GetSimpleCollisionHalfHeight();
 	int32 VisibleSamples = 0;
-	for (const float Fraction : { -0.28f, 0.22f, 0.66f })
+	for (const float Fraction : { 0.22f, 0.66f })
 	{
 		FHitResult Hit;
 		if (!GetWorld()->LineTraceSingleByChannel(Hit, Eye, Target + FVector(0, 0, HalfHeight * Fraction), ECC_Visibility, Params)

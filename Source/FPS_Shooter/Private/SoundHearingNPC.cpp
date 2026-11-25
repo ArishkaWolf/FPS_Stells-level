@@ -25,6 +25,7 @@
 ASoundHearingNPC::ASoundHearingNPC()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.05f;
 	AIControllerClass = AStealthAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 	// CharacterMovement applies the configured turn rate, including stationary search sweeps.
@@ -88,7 +89,8 @@ ASoundHearingNPC::ASoundHearingNPC()
 	StepAttenuation->Attenuation.OcclusionVolumeAttenuation = 0.50f;
 	StepAttenuation->Attenuation.OcclusionLowPassFilterFrequency = 1400.0f;
 	SoundEmitter->FootstepAttenuation = StepAttenuation;
-	SoundEmitter->RayCount = 16;
+	SoundEmitter->RayCount = 8;
+	SoundEmitter->MaxReflections = 1;
 	SoundEmitter->RayPitchDegrees = 0.0f;
 	SoundEmitter->Volume = 1.6f;
 	SoundEmitter->MaxDistance = 3000.0f;
@@ -242,7 +244,6 @@ void ASoundHearingNPC::Die()
 void ASoundHearingNPC::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	SoundLabel->SetVisibility(IsSoundRayDebugEnabled());
 	FireAnimationAge += DeltaSeconds;
 	HitAnimationAge += DeltaSeconds;
 	if (bDead)
@@ -257,6 +258,12 @@ void ASoundHearingNPC::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	if (!IsSoundRayDebugEnabled())
+	{
+		if (SoundLabel->IsVisible()) { SoundLabel->SetVisibility(false); }
+		return;
+	}
+	if (!SoundLabel->IsVisible()) { SoundLabel->SetVisibility(true); }
 
 	const int32 SoundPercent = FMath::RoundToInt(FMath::Clamp(HearingComponent->CurrentSoundStrength, 0.0f, 1.0f) * 100.0f);
 	const AStealthAIController* StealthController = Cast<AStealthAIController>(GetController());
