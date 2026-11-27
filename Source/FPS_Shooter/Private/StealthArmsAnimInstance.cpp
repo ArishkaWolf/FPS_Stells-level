@@ -31,7 +31,7 @@ namespace
 				HealWeight = FMath::FInterpTo(HealWeight, bHealing ? 1.0f : 0.0f, DeltaSeconds, 18.0f);
 				if (bReloading) { Reload = Player->GetReloadProgress(); }
 				ReloadWeight = FMath::FInterpTo(ReloadWeight, bReloading ? 1.0f : 0.0f, DeltaSeconds, 14.0f);
-				WeaponToHand = Player->GetWeaponToHandTransform();
+				WeaponToArms = Player->GetWeaponToArmsTransform();
 				MagazineGrip = Player->GetMagazineGripLocation();
 				Foregrip = Player->GetForegripLocation();
 				const float Speed = Player->GetVelocity().Size2D();
@@ -89,7 +89,7 @@ namespace
 		float HealWeight = 0.0f;
 		bool bReloading = false;
 		bool bHealing = false;
-		FTransform WeaponToHand;
+		FTransform WeaponToArms;
 		FVector MagazineGrip;
 		FVector Foregrip;
 
@@ -111,8 +111,8 @@ namespace
 			FCSPose<FCompactPose> ComponentPose;
 			ComponentPose.InitPose(Output.Pose);
 			// Keep the shoulders below the view while the right hand maintains its grip.
-			const FTransform RightHandTarget = ComponentPose.GetComponentSpaceTransform(RightIndex);
 			const FCompactPoseBoneIndex SpineIndex = BoneIndex(TEXT("spine_05"));
+			const FTransform RightHandTarget = ComponentPose.GetComponentSpaceTransform(RightIndex);
 			const FCompactPoseBoneIndex RightUpperIndex = BoneIndex(TEXT("upperarm_r"));
 			const FCompactPoseBoneIndex RightLowerIndex = BoneIndex(TEXT("lowerarm_r"));
 			const float ReloadClearance = ReloadWeight * FMath::SmoothStep(0.02f, 0.18f, Reload)
@@ -141,10 +141,11 @@ namespace
 				RightTransforms.Emplace(RightIndex, RightHand);
 				ComponentPose.LocalBlendCSBoneTransforms(RightTransforms, 1.0f);
 			}
+			ComponentPose.InitPose(Output.Pose);
 			FTransform Upper = ComponentPose.GetComponentSpaceTransform(UpperIndex);
 			FTransform Lower = ComponentPose.GetComponentSpaceTransform(LowerIndex);
 			FTransform Hand = ComponentPose.GetComponentSpaceTransform(HandIndex);
-			const FTransform Weapon = WeaponToHand * ComponentPose.GetComponentSpaceTransform(RightIndex);
+			const FTransform Weapon = WeaponToArms;
 			const FVector Support = Weapon.TransformPosition(Foregrip);
 			const FVector Magazine = Weapon.TransformPosition(MagazineGrip);
 			const float MagazineContact = FMath::SmoothStep(0.03f, 0.20f, Reload)

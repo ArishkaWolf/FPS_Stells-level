@@ -128,6 +128,7 @@ void ASoundHearingNPC::BeginPlay()
 		* FRotationMatrix::MakeFromYZ(GetActorForwardVector(), FVector::UpVector).ToQuat();
 	const FVector Grip = WeaponMesh->GetSocketTransform(TEXT("Grip_Bone"), RTS_Component).GetLocation();
 	WeaponMesh->SetRelativeTransform(FTransform(Rotation, -Rotation.RotateVector(Grip)));
+	WeaponToHandTransform = WeaponMesh->GetRelativeTransform();
 }
 
 void ASoundHearingNPC::ApplyDifficultyDamageMultiplier(float Multiplier)

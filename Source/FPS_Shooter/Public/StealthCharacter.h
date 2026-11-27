@@ -96,7 +96,7 @@ public:
 	UAnimSequence* GetArmsIdleAnimation() const { return ArmsIdleAnimation; }
 	UAnimSequence* GetArmsRunAnimation() const { return ArmsRunAnimation; }
 	UAnimSequence* GetArmsFireAnimation() const { return ArmsFireAnimation; }
-	FTransform GetWeaponToHandTransform() const { return WeaponToHandTransform; }
+	FTransform GetWeaponToArmsTransform() const;
 	FVector GetMagazineGripLocation() const;
 	FVector GetForegripLocation() const { return ForegripLocation; }
 	FVector GetIronSightLocation() const { return IronSightLocation; }
@@ -314,7 +314,6 @@ private:
 	float PeakFallSpeed = 0.0f;
 	float LastLandingStrength = 0.0f;
 	FTransform AimArmsTransform;
-	FTransform WeaponToHandTransform;
 	float TimeUntilNextShot = 0.0f;
 	float FireAnimationTimeRemaining = 0.0f;
 	int32 AmmoInMagazine = 0;
@@ -355,4 +354,5 @@ private:
 	void UpdateMovementState();
 	void UpdateFirstPersonAnimation(float DeltaSeconds);
 	void UpdateDeathPose(float DeltaSeconds);
+	void RebuildAimArmsTransform();
 };

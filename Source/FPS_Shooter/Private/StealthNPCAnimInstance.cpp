@@ -5,6 +5,7 @@
 #include "Animation/AnimationPoseData.h"
 #include "AnimationRuntime.h"
 #include "SoundHearingNPC.h"
+#include "TwoBoneIK.h"
 
 namespace
 {
@@ -21,6 +22,7 @@ namespace
 				Fire = NPC->GetFireAnimation(); Hit = NPC->GetHitAnimation(); Death = NPC->GetDeathAnimation();
 				FireAge = NPC->GetFireAnimationAge(); HitAge = NPC->GetHitAnimationAge();
 				DeathAge = NPC->GetDeathAnimationAge(); bDead = NPC->IsDead();
+				WeaponToHand = NPC->GetWeaponToHandTransform();
 				const float Speed = NPC->GetVelocity().Size2D();
 				MoveWeight = FMath::FInterpTo(MoveWeight, FMath::Clamp(Speed / 100.0f, 0.0f, 1.0f), DeltaSeconds, 8.0f);
 				RunWeight = FMath::FInterpTo(RunWeight, FMath::Clamp((Speed - 230.0f) / 140.0f, 0.0f, 1.0f), DeltaSeconds, 8.0f);
@@ -57,6 +59,7 @@ namespace
 				FAnimationRuntime::BlendTwoPosesTogether(OutputData, DeathData,
 					1.0f - FMath::Clamp(DeathAge / 0.12f, 0.0f, 1.0f), OutputData);
 			}
+			if (!bDead) { LockSupportHandToRifle(Output); }
 			Output.Pose.NormalizeRotations();
 			return true;
 		}
@@ -70,6 +73,8 @@ namespace
 		float IdleTime = 0, MoveTime = 0, MoveWeight = 0, RunWeight = 0;
 		float FireAge = BIG_NUMBER, HitAge = BIG_NUMBER, DeathAge = 0;
 		bool bDead = false;
+		FTransform WeaponToHand;
+		const FVector Foregrip = FVector(0.0f, 32.0f, 3.0f);
 		static void Sample(UAnimSequence* Sequence, float Time, bool bLoop, FPoseContext& Pose)
 		{
 			const float Length = FMath::Max(KINDA_SMALL_NUMBER, Sequence->GetPlayLength());
@@ -94,6 +99,39 @@ namespace
 				while (Ancestor != INDEX_NONE && Ancestor != Spine) { Ancestor = Bones.GetParentBoneIndex(Ancestor); }
 				if (Ancestor == Spine) { Output.Pose[Bone].BlendWith(Overlay.Pose[Bone], Alpha); }
 			}
+		}
+		void LockSupportHandToRifle(FPoseContext& Output) const
+		{
+			const FBoneContainer& Bones = Output.Pose.GetBoneContainer();
+			const auto BoneIndex = [&Bones](FName Name)
+			{
+				return Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(Bones.GetReferenceSkeleton().FindBoneIndex(Name)));
+			};
+			const FCompactPoseBoneIndex UpperIndex = BoneIndex(TEXT("upperarm_l"));
+			const FCompactPoseBoneIndex LowerIndex = BoneIndex(TEXT("lowerarm_l"));
+			const FCompactPoseBoneIndex HandIndex = BoneIndex(TEXT("hand_l"));
+			const FCompactPoseBoneIndex RightIndex = BoneIndex(TEXT("hand_r"));
+			if (UpperIndex == INDEX_NONE || LowerIndex == INDEX_NONE || HandIndex == INDEX_NONE || RightIndex == INDEX_NONE)
+			{
+				return;
+			}
+			FCSPose<FCompactPose> ComponentPose;
+			ComponentPose.InitPose(Output.Pose);
+			FTransform Upper = ComponentPose.GetComponentSpaceTransform(UpperIndex);
+			FTransform Lower = ComponentPose.GetComponentSpaceTransform(LowerIndex);
+			FTransform Hand = ComponentPose.GetComponentSpaceTransform(HandIndex);
+			const FTransform Weapon = WeaponToHand * ComponentPose.GetComponentSpaceTransform(RightIndex);
+			const FVector Target = Weapon.TransformPosition(Foregrip);
+			const FVector ElbowTarget = Upper.GetLocation() + FVector(-15.0f, -55.0f, -25.0f);
+			const FQuat WristRotation = Hand.GetRotation();
+			AnimationCore::SolveTwoBoneIK(Upper, Lower, Hand, ElbowTarget, Target, false, 1.0, 1.0);
+			Hand.SetRotation(WristRotation);
+			TArray<FBoneTransform> Transforms;
+			Transforms.Emplace(UpperIndex, Upper);
+			Transforms.Emplace(LowerIndex, Lower);
+			Transforms.Emplace(HandIndex, Hand);
+			ComponentPose.LocalBlendCSBoneTransforms(Transforms, 1.0f);
+			FCSPose<FCompactPose>::ConvertComponentPosesToLocalPoses(ComponentPose, Output.Pose);
 		}
 	};
 }

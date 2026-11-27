@@ -4,7 +4,6 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Navigation/PathFollowingComponent.h"
-#include "NavigationPath.h"
 #include "NavigationSystem.h"
 #include "NPCHearingComponent.h"
 #include "SoundHearingNPC.h"

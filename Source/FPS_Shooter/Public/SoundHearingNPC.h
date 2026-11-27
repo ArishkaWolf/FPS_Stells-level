@@ -40,6 +40,7 @@ public:
 	UAnimSequence* GetFireAnimation() const { return FireAnimation; }
 	UAnimSequence* GetHitAnimation() const { return HitAnimation; }
 	UAnimSequence* GetDeathAnimation() const { return DeathAnimation; }
+	FTransform GetWeaponToHandTransform() const { return WeaponToHandTransform; }
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UNPCHearingComponent> HearingComponent;
@@ -118,6 +119,7 @@ private:
 	float DeathAnimationAge = 0.0f;
 	float UnscaledFireDamage = 10.0f;
 	bool bHasCachedFireDamage = false;
+	FTransform WeaponToHandTransform;
 	FVector LastShotDirection = FVector::ForwardVector;
 	FVector LastShotAimDirection = FVector::ForwardVector;
 	void Die();

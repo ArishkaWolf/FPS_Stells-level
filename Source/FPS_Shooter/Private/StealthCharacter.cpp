@@ -716,17 +716,29 @@ void AStealthCharacter::CalibrateWeapon()
 	WeaponMesh->AttachToComponent(FirstPersonArms, FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("hand_r"));
 	WeaponMesh->SetRelativeTransform(FTransform(GripRotation,
 		OldGrip.GetLocation() + WeaponGripTransform.GetLocation() - GripRotation.RotateVector(ModelGrip), WeaponGripTransform.GetScale3D()));
-	WeaponToHandTransform = WeaponMesh->GetRelativeTransform();
+	RebuildAimArmsTransform();
+}
 
-	const FTransform WeaponInArms = WeaponMesh->GetComponentTransform().GetRelativeTransform(FirstPersonArms->GetComponentTransform());
+void AStealthCharacter::RebuildAimArmsTransform()
+{
+	if (!WeaponMesh || !FirstPersonArms) { return; }
+	const FTransform WeaponInArms = GetWeaponToArmsTransform();
 	const FQuat DesiredCameraRotation = FRotationMatrix::MakeFromYZ(FVector::ForwardVector, FVector::UpVector).ToQuat();
 	const FQuat ArmsRotation = DesiredCameraRotation * WeaponInArms.GetRotation().Inverse();
 	const FVector ArmsLocation = FVector(AimSightDistance, 0, 0) - ArmsRotation.RotateVector(WeaponInArms.TransformPosition(IronSightLocation));
 	AimArmsTransform = FTransform(ArmsRotation, ArmsLocation);
 }
 
+FTransform AStealthCharacter::GetWeaponToArmsTransform() const
+{
+	return WeaponMesh && FirstPersonArms
+		? WeaponMesh->GetComponentTransform().GetRelativeTransform(FirstPersonArms->GetComponentTransform())
+		: FTransform::Identity;
+}
+
 void AStealthCharacter::UpdateFirstPersonPose(float DeltaSeconds)
 {
+	if (bIsAiming) { RebuildAimArmsTransform(); }
 	AimAlpha = FMath::FInterpTo(AimAlpha, bIsAiming ? 1.0f : 0.0f, DeltaSeconds, AimInterpSpeed);
 	CrouchAlpha = FMath::FInterpTo(CrouchAlpha, bIsCrouched ? 1.0f : 0.0f, DeltaSeconds, 9.0f);
 	FollowCamera->SetFieldOfView(FMath::Lerp(HipFieldOfView, AimFieldOfView, AimAlpha));
@@ -755,7 +767,7 @@ void AStealthCharacter::UpdateFirstPersonPose(float DeltaSeconds)
 	if (const USkeletalMesh* Rifle = WeaponMesh->GetSkeletalMeshAsset(); Rifle &&
 		(bIsReloading || ReloadPoseTilt > 0.01f || HealingPoseWeight > 0.01f))
 	{
-		const FBoxSphereBounds Bounds = Rifle->GetImportedBounds().TransformBy(WeaponToHandTransform * HandInArms * Target);
+		const FBoxSphereBounds Bounds = Rifle->GetImportedBounds().TransformBy(GetWeaponToArmsTransform() * Target);
 		const double RearDepth = Bounds.Origin.X - Bounds.BoxExtent.X;
 		const double Clearance = GEngine->NearClipPlane + 6.0;
 		Target.AddToTranslation(FVector(FMath::Max(0.0, Clearance - RearDepth), 0, 0));
